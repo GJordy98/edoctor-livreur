@@ -1,26 +1,284 @@
 @import "tailwindcss";
 
-:root {
-  --background: #ffffff;
-  --foreground: #171717;
+/* ========================
+   CUSTOM THEME — e-Dr TIM Delivery
+   Mode Clair  : Vert + Blanc
+   Mode Sombre : Vert + Bleu Nuit
+   ======================== */
+@theme {
+  /* ---- Couleurs primaires ---- */
+  --color-primary: #2e8b57;
+  --color-primary-hover: #20603d;
+  --color-primary-light: #e6f4ec;
+  --color-secondary: #20603d;
+
+  /* ---- Backgrounds ---- */
+  --color-background-light: #f0faf4;
+  /* vert très pâle */
+  --color-background-dark: #071324;
+  /* bleu nuit profond */
+  --color-surface-light: #ffffff;
+  --color-surface-dark: #0d2040;
+  /* bleu nuit intermédiaire */
+  --color-card-dark: #112b52;
+  /* carte bleu nuit */
+  --color-input-dark: #0d1e3a;
+  /* champ bleu nuit foncé */
+  --color-sidebar-dark: #081730;
+  /* sidebar bleu nuit très foncé */
+  --color-header-dark: #0a1d38;
+  /* header bleu nuit */
+
+  /* ---- Borders ---- */
+  --color-border-light: #c8e6d4;
+  --color-border-dark: #1a3a6e;
+  /* bordure bleu nuit */
+
+  /* ---- Text ---- */
+  --color-text-muted: #a0b4c8;
+  --color-text-muted-light: #5a7a6a;
+
+  /* ---- Font ---- */
+  --font-display: "Outfit", sans-serif;
+  --font-body: "Outfit", sans-serif;
+  --font-sans: "Outfit", sans-serif;
+  --font-mono:
+    "ui-monospace", "SFMono-Regular", "Menlo", "Monaco", "Consolas",
+    "Liberation Mono", "Courier New", monospace;
+
+  /* ---- Border radius ---- */
+  --radius: 0.25rem;
+  --radius-lg: 0.5rem;
+  --radius-xl: 0.75rem;
+  --radius-full: 9999px;
 }
 
-@theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
-}
+/* ========================
+   GLOBAL STYLES
+   ======================== */
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
+* {
+  box-sizing: border-box;
 }
 
 body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  font-family: "Outfit", sans-serif;
+}
+
+/* Scrollbar personnalisée */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #2e8b5766;
+  border-radius: 99px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #2e8b57;
+}
+
+/* ========================
+   ANIMATIONS
+   ======================== */
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@keyframes fadeInUp {
+  0% {
+    opacity: 0;
+    transform: translateY(20px);
+  }
+
+  100% {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes fadeIn {
+  0% {
+    opacity: 0;
+  }
+
+  100% {
+    opacity: 1;
+  }
+}
+
+@keyframes shake {
+
+  0%,
+  100% {
+    transform: translateX(0);
+  }
+
+  25% {
+    transform: translateX(-5px);
+  }
+
+  75% {
+    transform: translateX(5px);
+  }
+}
+
+@keyframes pulse-dot {
+
+  0%,
+  100% {
+    opacity: 1;
+    transform: scale(1);
+  }
+
+  50% {
+    opacity: 0.5;
+    transform: scale(1.2);
+  }
+}
+
+@keyframes slideInRight {
+  0% {
+    opacity: 0;
+    transform: translateX(20px);
+  }
+
+  100% {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+/* ========================
+   CLASSES UTILITAIRES
+   ======================== */
+
+.loader {
+  border: 2px solid transparent;
+  border-top-color: currentColor;
+  border-radius: 50%;
+  width: 18px;
+  height: 18px;
+  animation: spin 0.8s linear infinite;
+}
+
+.spinner {
+  width: 20px;
+  height: 20px;
+  border: 2px solid transparent;
+  border-top-color: #2e8b57;
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
+}
+
+.animate-fade-in-up {
+  animation: fadeInUp 0.5s ease-out;
+}
+
+.animate-fade-in {
+  animation: fadeIn 0.3s ease-out;
+}
+
+.animate-slide-in-right {
+  animation: slideInRight 0.4s ease-out;
+}
+
+.pulse-dot {
+  animation: pulse-dot 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+}
+
+/* OTP input states */
+.input-error {
+  border-color: #ef4444 !important;
+  animation: shake 0.5s ease-in-out;
+}
+
+.input-success {
+  border-color: #2e8b57 !important;
+}
+
+/* Remove spinner from number inputs */
+input[type="number"]::-webkit-inner-spin-button,
+input[type="number"]::-webkit-outer-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+
+input[type="number"] {
+  -moz-appearance: textfield;
+}
+
+/* ========================
+   COMPOSANTS RÉUTILISABLES
+   ======================== */
+
+/* Bouton primaire vert */
+.btn-primary {
+  background-color: #2e8b57;
+  color: white;
+  font-weight: 700;
+  padding: 0.75rem 1.5rem;
+  border-radius: 0.75rem;
+  transition: all 0.2s;
+  box-shadow: 0 4px 14px rgba(46, 139, 87, 0.3);
+}
+
+.btn-primary:hover {
+  background-color: #20603d;
+  box-shadow: 0 6px 20px rgba(46, 139, 87, 0.4);
+  transform: translateY(-1px);
+}
+
+.btn-primary:active {
+  transform: scale(0.98);
+}
+
+/* Card légère mode clair */
+.card-light {
+  background: white;
+  border: 1px solid #c8e6d4;
+  border-radius: 1rem;
+  box-shadow: 0 2px 8px rgba(46, 139, 87, 0.08);
+}
+
+/* Card mode sombre bleu nuit */
+.card-dark {
+  background: #112b52;
+  border: 1px solid #1a3a6e;
+  border-radius: 1rem;
+}
+
+/* Effet glassmorphism vert */
+.glass-green {
+  background: rgba(46, 139, 87, 0.12);
+  backdrop-filter: blur(12px);
+  border: 1px solid rgba(46, 139, 87, 0.25);
+}
+
+/* Gradient de fond dégradé vert→bleu nuit pour éléments hero */
+.gradient-hero-dark {
+  background: linear-gradient(135deg, #0a1d38 0%, #071324 50%, #0a1f10 100%);
+}
+
+/* Sidebar active item */
+.nav-item-active {
+  background: rgba(46, 139, 87, 0.15);
+  color: #2e8b57;
+  font-weight: 600;
+  border-left: 3px solid #2e8b57;
+}
+
+/* Focus ring vert */
+.focus-ring-green:focus {
+  outline: none;
+  box-shadow: 0 0 0 3px rgba(46, 139, 87, 0.35);
 }
