@@ -1,18 +1,15 @@
-/**
- * Page Progression Livraison [id] — e-Dr TIM Delivery System
- * Migré depuis delivery_progress.html + delivery_progress.js
- */
+"use client";
 
-export default function DeliveryProgressPage({
-  params,
-}: {
-  params: { id: string };
-}) {
-  return (
-    <div>
-      <h1 className="text-xl font-bold text-white mb-4">Progression livraison #{params.id}</h1>
-      {/* TODO: Étapes de livraison, carte, statut, actions */}
-      <p className="text-slate-500 text-sm">[Page à migrer depuis delivery_progress.html + delivery_progress.js]</p>
-    </div>
-  );
+import { useEffect } from "react";
+import { useRouter } from "next/navigation";
+
+/**
+ * Redirige vers /missions qui gère l'état "active" complet.
+ */
+export default function DeliveryProgressPage() {
+  const router = useRouter();
+  useEffect(() => {
+    router.replace("/missions");
+  }, [router]);
+  return null;
 }

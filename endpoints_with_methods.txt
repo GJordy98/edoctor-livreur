@@ -1,0 +1,83 @@
+/Manage Patient/Patient Information(order , wallet)/list order patient [GET] -> http://127.0.0.1:8000/api/v1/patient/list_order_patient/?status=IN_PICKUP
+/Manage Patient/Patient Information(order , wallet)/list notification patient [GET] -> http://127.0.0.1:8000/api/v1/patient/list_notification_patient/
+/Manage Patient/Patient Information(order , wallet)/get wallet patient [GET] -> {{baseUrl}}api/v1/wallet-patient/get_wallet_patient/
+/Manage Patient/reception colis/get qrcode [GET] -> http://e-doctorpharma.onrender.com/api/v1/orders/{order_id}/qr-code/
+/Manage Patient/reception colis/dispute orders [POST] -> http://e-doctorpharma.onrender.com/api/v1/dispute-order/
+/Manage Patient/create patient [POST] -> {{baseUrl}}/api/v1/register/
+/Manage Patient/get patient [GET] -> {{baseURL}}/api/v1/patient/c6016141-86c0-446d-ac5e-f92fc202c15a/
+/Manage Patient/login [POST] -> {{baseUrl}}/api/v1/login/
+/Manage Patient/register patient [POST] -> {{baseURL}}/api/v1/register/
+/Manage Patient/validate otp [POST] -> http://172.19.144.1:8000/api/v1/valid-otp/
+/Manage Patient/resend otp [POST] -> {{baseUrl}}api/v1/send-otp/
+/Manage Patient/change fogot password [POST] -> {{baseURL}}/api/v1/change-fogot-password/
+/Manage Patient/list patient [GET] -> {{baseURL}}/api/v1/patient/
+/Manage Patient/update profile patient [PATCH] -> {{baseURL}}/api/v1/patient/c81a063e-75ba-481e-a34d-d3936f8eb10d/
+/Manage Patient/create delivery [POST] -> http://127.0.0.1:8000/api/v1/delivery/
+/Manage Patient/add token for fcm [POST] -> https://e-doctorpharma.onrender.com/api/v1/register-fcm-token/
+/Manage Patient/change password [POST] -> {{baseUrl}}api/v1/change-password/
+/Manage officine/Manage Lot/create lot [POST] -> https://e-doctorpharma.onrender.com/api/v1/lots/
+/Manage officine/Manage Lot/create product unit convertion [POST] -> {{baseURL}}/api/v1/conversions/
+/Manage officine/Manage Lot/create price of product [POST] -> https://e-doctorpharma.onrender.com/api/v1/product-price/
+/Manage officine/mange officine pharmacie/get all officine [GET] -> {{baseURL}}/api/v1/officine/
+/Manage officine/mange officine pharmacie/lits product officine [GET] -> {{baseURL}}/api/v1/officine/6f07ed46-2800-439f-ad4c-ac05fcb88976/list-product/
+/Manage officine/mange officine pharmacie/New Request [GET] -> 
+/Manage officine/mange officine pharmacie/get all products by officine_id [GET] -> {{baseURL}}/api/v1/officine/list-all-product-officine/
+/Manage officine/mange officine pharmacie/search product officine [POST] -> {{baseUrl}}/api/v1/search-produit-officine/
+/Manage officine/manage planing officine/create planing [PUT] -> http://127.0.0.1:8000/api/v1/officine/a832f7cf-c0a2-44c9-92eb-b33671b778af/update-schedule/
+/Manage officine/manage planing officine/get officine with planning [GET] -> http://127.0.0.1:8000/api/v1/officine/a832f7cf-c0a2-44c9-92eb-b33671b778af/schedule/
+/Manage officine/register officine [POST] -> {{baseURL}}/api/v1/register-officine/
+/Manage officine/register officine with user or pharmacist [POST] -> {{baseURL}}/api/v1/register-officine-user/
+/Manage officine/kyc officine [POST] -> {{baseURL}}/api/v1/kyc-file-officine/
+/Manage officine/add owners of officine [POST] -> {{baseURL}}/api/v1/kyc-file-officine/
+/Manage officine/http://127.0.0.1:8000/api/v1/register-officine/ [POST] -> {{baseURL}}/api/v1/register-officine/
+/Manage Admin Api/Gestion User/get user [GET] -> 
+/Manage Admin Api/Gestion User/delete user [DELETE] -> {{baseUrl}}api/v1/user/ea6b868a-2801-4390-8f44-680f8cc28459/
+/Manage Admin Api/Kyc/create kyc [GET] -> {{baseURL}}/api/v1/kyc-file/
+/Manage Admin Api/Kyc/create kyc [POST] -> {{baseURL}}/api/v1/kyc-file/
+/Manage Product/Categorie Products/get all categorie [GET] -> {{baseURL}}/api/v1/categories/
+/Manage Product/Manage Unit/create all init [GET] -> 
+/Manage Product/get product/get all products [GET] -> {{baseURL}}/api/v1/products/
+/Manage Product/create categorie [POST] -> {{baseURL}}/api/v1/categories/
+/Manage Product/recherche produit [GET] -> https://e-doctorpharma.onrender.com/api/v1/search/products/?q=BENZYLPENICILLINE&latitude&longitude&distance
+/Manage Product/recherche avec multiple produit [POST] -> {{baseUrl}}/api/v1/pharmacies/availability/
+/Manage Product/search officine by position [GET] -> {{baseURL}}/api/v1/officines/nearby/?latitude=1.0325&longitude=1.8949846
+/Manage Product/result search product by officine [GET] -> 
+/manage Order/manage cart product/add product cart [POST] -> {{baseURL}}/api/v1/patient-cart/add_item/
+/manage Order/manage cart product/valid order on checkout [POST] -> http://127.0.0.1:8000/api/v1/checkout/
+/manage Order/manage cart product/get cart patiant [GET] -> {{baseUrl}}api/v1/patient-cart/get_cart/
+/manage Order/manage cart product/validated order_id [POST] -> http://127.0.0.1:8000/api/v1/officine-order/5fbb2542-caff-403b-8e09-eab21fc0f333/validate/
+/manage Order/manage cart product/remove item on cart [POST] -> http://127.0.0.1:8000/api/v1/patient-cart/remove_item/
+/manage Order/officne order/list order officine by officine [GET] -> {{baseUrl}}api/v1/officine/a832f7cf-c0a2-44c9-92eb-b33671b778af/list-officine-orders-pending/?status=PENDING
+/manage Order/officne order/get order by officine [GET] -> {{baseURL}}api/v1/officine-order/
+/manage Order/officne order/get item of sub-order officine [GET] -> http://127.0.0.1:8000/api/v1/officine-order/cfb96c60-9ace-4c7d-aa4d-4f102e527dec/items-order/
+/manage Order/officne order/update items officine orders [POST] -> http://127.0.0.1:8000/api/v1/officine-order/f08d45fd-028c-44d6-93c3-7b6818382828/update-items-status/
+/manage Order/officne order/validate officine order by officine [POST] -> http://127.0.0.1:8000/api/v1/officine-order/ab8d7af9-8e67-4797-8bed-222143e43756/validate-officine-order/
+/manage Order/officne order/items of orders officine [GET] -> http://127.0.0.1:8000/api/v1/officine-order/a7b6decb-46de-4de8-aa33-1c0c848b80cb/
+/manage Order/New Folder/New Request [GET] -> 
+/manage Order/manage order by officine 2nd proces/send file or prescription at officine [POST] -> http://127.0.0.1:8000/api/v1/send-presciption-order/6f07ed46-2800-439f-ad4c-ac05fcb88976/validate/
+/manage Order/manage order by officine 2nd proces/generate the sub-order for patient by officine or validaded officine order by officine [POST] -> http://127.0.0.1:8000/api/v1/sub-order-item-officine/
+/manage Order/manage order by officine 2nd proces/valide-order by patient [POST] -> http://127.0.0.1:8000/api/v1/validated-order-by-patient/
+/manage Order/manage order by officine 2nd proces/get invoice order patient [POST] -> http://127.0.0.1:8000/api/v1/get-invoice-order-patient/
+/manage Order/manage order by officine 2nd proces/get pdf invoice user [GET] -> http://127.0.0.1:8000/api/v1/get-invoice-order-patient/aba90596-7cf7-4e5e-be26-a980d2ef07e8/pdf/
+/admin folder/Mission Delivery/get mission [GET] -> http://127.0.0.1:8000/api/v1/mission/
+/admin folder/add wallert at old user [GET] -> http://127.0.0.1:8000/api/v1/add-wallet-to-last-user/
+/admin folder/add wallet of officine [GET] -> http://127.0.0.1:8000/api/v1/add-wallet-to-last-officine/
+/admin folder/create wallet [GET] -> 
+/admin folder/review driverDelivery [POST] -> {{baseUrl}}/api/v1/delivery/review_driver/
+/admin folder/get all driver [GET] -> 
+/Manage delevery/update info delevery [PATCH] -> http://127.0.0.1:8000/api/v1/delivery/92fbe945-91a6-4137-97c4-1069a0b52f0a/
+/Manage delevery/driver position [POST] -> http://127.0.0.1:8000/api/v1/driver-localisation/
+/Manage delevery/get delivery [GET] -> 
+/Manage delevery/get order-patient on mission [GET] -> {{baseUrl}}api/v1/mission/get_info_by_mission/?mission=kghbcljqdnuciblk,vojnsv
+/Manage delevery/accept pick-up [GET] -> 
+/Manage delevery/get pick-up [GET] -> 
+/Manage delevery/accept mission by driver [POST] -> https://e-doctorpharma.onrender.com/api/v1/mission/0e809975-f15e-470e-b192-95bd3a1a070d/accept_mission_order/
+/Manage delevery/get all officine for pickup [GET] -> https://e-doctorpharma.onrender.com/api/v1/pickup-qr-code/?mission=0e809975-f15e-470e-b192-95bd3a1a070d
+/Manage delevery/SCANNER QR_code [POST] -> {{baseUrl}}api/v1/scan-qrcode-pickup/
+/Manage delevery/get mission assigned [GET] -> http://e-doctorpharma.onrender.com/api/v1/delivery/last_mission_assigned/
+/Manage delevery/cancel Mission [POST] -> http://127.0.0.1:8000/api/v1/mission/0e809975-f15e-470e-b192-95bd3a1a070d/cancel_mission/
+/Manage delevery/get info mission [GET] -> {{baseUrl}}api/v1/mission/get_info_by_mission/?mission=kghbcljqdnuciblk,vojnsv
+/Manage delevery/scan order reception [POST] -> http://e-doctorpharma.onrender.com/api/v1/scan-qrcode-order//{order_id}/delivery
+/Rating/create rating [POST] -> http://127.0.0.1:8000/api/v1/rating/
+/list notification user [GET] -> http://127.0.0.1:8000/api/v1/notification-user/list_notification_user/
+/New Request [GET] -> 

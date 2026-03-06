@@ -7,6 +7,8 @@
  */
 
 import { useState, useEffect, useRef, useCallback } from "react";
+import { sendPosition } from "@/lib/api-client";
+
 
 export type GpsStatus = "idle" | "searching" | "active" | "error";
 
@@ -34,6 +36,9 @@ export function useGeolocation(): UseGeolocationReturn {
   const [zone, setZone] = useState("");
   const watchIdRef = useRef<number | null>(null);
   const lastGeocodeRef = useRef<{ key: string; at: number }>({ key: "", at: 0 });
+  // Throttle sendPosition : max 1 appel toutes les 10s
+  const lastSendPositionRef = useRef<number>(0);
+
 
   const reverseGeocode = useCallback(async (lat: number, lng: number) => {
     const key = `${lat.toFixed(4)},${lng.toFixed(4)}`;
@@ -65,9 +70,9 @@ export function useGeolocation(): UseGeolocationReturn {
         setAddress(parts.slice(0, 3).join(", ") || data.display_name.split(",").slice(0, 3).join(","));
         setZone(
           data.address?.suburb ||
-            data.address?.neighbourhood ||
-            data.address?.city ||
-            "Zone inconnue"
+          data.address?.neighbourhood ||
+          data.address?.city ||
+          "Zone inconnue"
         );
       }
     } catch {
@@ -87,6 +92,15 @@ export function useGeolocation(): UseGeolocationReturn {
       setStatus("active");
       setStatusText("GPS Actif");
       reverseGeocode(geoPos.latitude, geoPos.longitude);
+
+      // Envoyer la position au backend (throttlé à 1 fois / 10s)
+      const now = Date.now();
+      if (now - lastSendPositionRef.current >= 10_000) {
+        lastSendPositionRef.current = now;
+        sendPosition(geoPos.latitude, geoPos.longitude).catch(() => {
+          // Ignorer les erreurs réseau silencieusement
+        });
+      }
     },
     [reverseGeocode]
   );

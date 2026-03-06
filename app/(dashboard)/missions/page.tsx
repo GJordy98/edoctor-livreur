@@ -1,108 +1,103 @@
 "use client";
 
 /**
- * Page Missions Actives — e-Dr TIM Delivery System
- * Migré fidèlement depuis actives_missions.html + actives_missions.js
- * Flux : Activer livraison → Recherche mission → Modal countdown → Accepter/Refuser
+ * Page Missions — e-Dr TIM Delivery System
+ * Affiche la dernière mission assignée au livreur (last_mission_assigned).
+ * Le livreur peut Accepter ou Refuser la mission.
  */
 
 import { useEffect, useRef, useState, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import {
+  Truck, MapPin, Package, Clock, Settings, User, LogOut,
+  RefreshCw, Bell, Building2, Phone, HourglassIcon, Loader2,
+  CheckCircle, XCircle, ArrowRight, AlertTriangle, X, ScanLine,
+  Hash, ChevronRight,
+} from "lucide-react";
+import {
   getLastMission,
-  getMissionInfo,
+  getLastMissionDebug,
   acceptMission,
   cancelMission,
+  generatePickupCode,
+  getPickupOfficinesForMission,
+  getMissionById,
   getNotifications,
   type ApiNotification,
   type MissionInfoResponse,
+  type PickupOfficine,
 } from "@/lib/api-client";
-import { getUserInfo, clearAuth, type UserInfo } from "@/lib/auth";
+import { getUserInfo, clearAuth, getDeliveryStatus, type UserInfo } from "@/lib/auth";
 
-// ---- Types ----
-interface Mission {
+// ─── types ────────────────────────────────────────────────────────────────────
+
+interface RawMission {
   id: string;
-  pharmacy_name?: string;
-  title?: string;
-  pickup_address?: string;
-  address?: string;
-  items_count?: number;
-  total_items?: number;
-  distance_km?: number;
-  estimated_minutes?: number;
+  status?: string;
+  created_at?: string;
+  [key: string]: unknown;
 }
 
-type AppState = "idle" | "loading" | "no-mission" | "incoming" | "active";
+type AppState = "loading" | "no-mission" | "pending" | "accepting" | "active";
 
-// ---- Component ----
+// ─── helpers ──────────────────────────────────────────────────────────────────
+
+function formatTimeAgo(iso: string, now: number) {
+  if (!iso) return "";
+  const diff = Math.floor((now - new Date(iso).getTime()) / 60000);
+  if (diff < 1) return "À l'instant";
+  if (diff < 60) return `${diff} min`;
+  if (diff < 1440) return `${Math.floor(diff / 60)} h`;
+  return new Date(iso).toLocaleDateString("fr-FR");
+}
+
+// ─── Main component ───────────────────────────────────────────────────────────
+
 export default function MissionsPage() {
   const router = useRouter();
   const [userInfo, setUserInfo] = useState<UserInfo | null>(null);
+  const [now, setNow] = useState<number>(Date.now());
+  const [appState, setAppState] = useState<AppState>("loading");
+  const [driverStatus, setDriverStatus] = useState<string | null>(null);
 
-  // Charger userInfo côté client uniquement (évite la mismatch SSR/localStorage)
-  useEffect(() => {
-    setUserInfo(getUserInfo());
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
-
-  const [appState, setAppState] = useState<AppState>("idle");
-  const [isOnline, setIsOnline] = useState(false);
-  const [currentMission, setCurrentMission] = useState<Mission | null>(null);
+  // Mission data
+  const [mission, setMission] = useState<RawMission | null>(null);
   const [missionInfo, setMissionInfo] = useState<MissionInfoResponse | null>(null);
-  const [missionInfoLoading, setMissionInfoLoading] = useState(false);
-  const [countdown, setCountdown] = useState(30);
+  const [officines, setOfficines] = useState<PickupOfficine[]>([]);
+  const [missionLoading, setMissionLoading] = useState(false);
+
+  // Debug
+  const [debugInfo, setDebugInfo] = useState<{ status: number; raw: unknown; error?: string } | null>(null);
+  const [showDebug, setShowDebug] = useState(false);
+
+  // Accept/Refuse UI
+  const [showRefuseConfirm, setShowRefuseConfirm] = useState(false);
+  const [refuseLoading, setRefuseLoading] = useState(false);
+  const [refuseError, setRefuseError] = useState("");
+
+  // GPS
   const [gpsStatus, setGpsStatus] = useState<"inactive" | "searching" | "active" | "error">("inactive");
 
   // Notifications
   const [notifications, setNotifications] = useState<ApiNotification[]>([]);
   const [showNotifDropdown, setShowNotifDropdown] = useState(false);
-  const [showNotifModal, setShowNotifModal] = useState(false);
-  const [selectedNotif, setSelectedNotif] = useState<ApiNotification | null>(null);
 
-  // Refs for intervals / watchId
-  const missionIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
-  const countdownIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const listIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const notifIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const gpsWatchRef = useRef<number | null>(null);
 
-  const unreadCount = notifications.filter((n) => !n.read).length;
+  // ── Init ──────────────────────────────────────────────────────────────────
 
-  // ---- Charger détails mission active ----
-  const fetchMissionInfo = useCallback(async () => {
-    setMissionInfoLoading(true);
-    try {
-      const info = await getMissionInfo();
-      setMissionInfo(info);
-    } catch {
-      // ignore
-    } finally {
-      setMissionInfoLoading(false);
-    }
+  useEffect(() => {
+    setUserInfo(getUserInfo());
+    setDriverStatus(getDeliveryStatus());
+    const interval = setInterval(() => setNow(Date.now()), 60000);
+    return () => clearInterval(interval);
   }, []);
 
-  // Vérifier si une mission est en cours au chargement
+  // GPS
   useEffect(() => {
-    const saved = localStorage.getItem("current_mission");
-    if (saved) {
-      try {
-        const mission = JSON.parse(saved) as Mission;
-        setCurrentMission(mission);
-        setIsOnline(true);
-        setAppState("active");
-        fetchMissionInfo();
-      } catch {
-        // ignore
-      }
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
-
-  // ---- GPS ----
-  useEffect(() => {
-    if (!navigator.geolocation) {
-      setGpsStatus("error");
-      return;
-    }
+    if (!navigator.geolocation) { setGpsStatus("error"); return; }
     setGpsStatus("searching");
     gpsWatchRef.current = navigator.geolocation.watchPosition(
       () => setGpsStatus("active"),
@@ -114,7 +109,102 @@ export default function MissionsPage() {
     };
   }, []);
 
-  // ---- Notifications polling ----
+  // Si current_mission dans localStorage → vérifier avec le backend avant de rediriger
+  useEffect(() => {
+    const saved = localStorage.getItem("current_mission");
+    if (saved) {
+      try {
+        const parsed = JSON.parse(saved) as RawMission;
+        // Seulement rediriger si la mission a un statut actif
+        const st = String(parsed.status || "").toUpperCase();
+        const isActive =
+          st === "ACCEPTED" || st === "IN_PROGRESS" ||
+          st === "IN_PICKUP" || st === "IN_DELIVERY";
+        if (isActive) {
+          router.replace("/mission-active");
+          return;
+        } else {
+          // Mission sauvegardée mais statut non-actif → effacer et continuer
+          localStorage.removeItem("current_mission");
+        }
+      } catch {
+        localStorage.removeItem("current_mission");
+      }
+    }
+    fetchLastMission();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // ── Fetch last mission ────────────────────────────────────────────────────
+
+  const fetchLastMission = useCallback(async () => {
+    setAppState("loading");
+    try {
+      const result = await getLastMissionDebug();
+      setDebugInfo({ status: result.httpStatus, raw: result.rawResponse, error: result.error });
+      console.log("[Missions] last_mission_assigned →", result);
+
+      const raw = result.mission;
+      if (!raw || !raw.id) {
+        setMission(null);
+        setMissionInfo(null);
+        setOfficines([]);
+        setAppState("no-mission");
+        return;
+      }
+
+      const m = raw as unknown as RawMission;
+      setMission(m);
+
+      // Detect if already accepted (status)
+      const status = String(m.status || "").toUpperCase();
+      const alreadyAccepted =
+        status === "ACCEPTED" ||
+        status === "IN_PROGRESS" ||
+        status === "IN_PICKUP" ||
+        status === "IN_DELIVERY";
+
+      if (alreadyAccepted) {
+        // Mission déjà acceptée → enregistrer et rediriger
+        localStorage.setItem("current_mission", JSON.stringify(m));
+        localStorage.setItem("mission_phase", "pickup");
+        router.replace("/mission-active");
+        return;
+      }
+
+      setAppState("pending");
+      setMissionLoading(true);
+
+      // Fetch extended info
+      try {
+        const [info, offs] = await Promise.all([
+          getMissionById(m.id).catch(() => null),
+          getPickupOfficinesForMission(m.id).catch(() => [] as PickupOfficine[]),
+        ]);
+        if (info) setMissionInfo(info);
+        setOfficines(offs);
+      } catch { /* silent */ }
+
+      setMissionLoading(false);
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      setDebugInfo({ status: 0, raw: null, error: msg });
+      setMission(null);
+      setMissionInfo(null);
+      setOfficines([]);
+      setAppState("no-mission");
+    }
+  }, [router]);
+
+  // Polling toutes les 15 s
+  useEffect(() => {
+    if (appState === "pending" || appState === "no-mission") {
+      listIntervalRef.current = setInterval(fetchLastMission, 15_000);
+    }
+    return () => { if (listIntervalRef.current) clearInterval(listIntervalRef.current); };
+  }, [appState, fetchLastMission]);
+
+  // Notifications polling
   const fetchNotifications = useCallback(async () => {
     try {
       const data = await getNotifications();
@@ -123,16 +213,11 @@ export default function MissionsPage() {
         const merged = [...prev];
         data.forEach((n) => {
           if (!ids.has(n.id)) merged.push(n);
-          else {
-            const idx = merged.findIndex((x) => x.id === n.id);
-            if (idx !== -1) merged[idx] = n;
-          }
+          else { const idx = merged.findIndex((x) => x.id === n.id); if (idx !== -1) merged[idx] = n; }
         });
         return merged.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
       });
-    } catch {
-      // silently ignore
-    }
+    } catch { /* silent */ }
   }, []);
 
   useEffect(() => {
@@ -141,262 +226,240 @@ export default function MissionsPage() {
     return () => { if (notifIntervalRef.current) clearInterval(notifIntervalRef.current); };
   }, [fetchNotifications]);
 
-  // ---- Check mission ----
-  const checkForMission = useCallback(async () => {
-    try {
-      const data = await getLastMission() as Mission;
-      if (data && data.id) {
-        setCurrentMission(data);
-        setAppState("incoming");
-        startCountdown();
-      } else {
-        setAppState("no-mission");
-      }
-    } catch {
-      setAppState("no-mission");
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+  // Cleanup
+  useEffect(() => {
+    return () => {
+      if (listIntervalRef.current) clearInterval(listIntervalRef.current);
+      if (notifIntervalRef.current) clearInterval(notifIntervalRef.current);
+    };
   }, []);
 
-  // ---- Countdown ----
-  function startCountdown() {
-    if (countdownIntervalRef.current) clearInterval(countdownIntervalRef.current);
-    setCountdown(30);
-    let secs = 30;
-    countdownIntervalRef.current = setInterval(() => {
-      secs -= 1;
-      setCountdown(secs);
-      if (secs <= 0) {
-        clearInterval(countdownIntervalRef.current!);
-        handleDecline();
-      }
-    }, 1000);
-  }
+  // ── Accept mission ────────────────────────────────────────────────────────
 
-  // ---- Activate delivery ----
-  async function handleActivate() {
-    setIsOnline(true);
-    setAppState("loading");
-    await checkForMission();
-    // Poll every 30s
-    if (missionIntervalRef.current) clearInterval(missionIntervalRef.current);
-    missionIntervalRef.current = setInterval(checkForMission, 30_000);
-  }
-
-  // ---- Accept mission ----
   async function handleAccept() {
-    if (!currentMission) return;
-    if (countdownIntervalRef.current) clearInterval(countdownIntervalRef.current);
+    if (!mission) return;
+    setAppState("accepting");
     try {
-      await acceptMission(currentMission.id);
-      localStorage.setItem("current_mission", JSON.stringify(currentMission));
-      router.push(`/missions/${currentMission.id}/progress`);
+      // L'API acceptMission retourne les infos de la mission acceptée (dont le code)
+      const acceptResponse = await acceptMission(mission.id);
+
+      // Extraire le code de ramassage depuis la réponse d'acceptation
+      const resp = (acceptResponse ?? {}) as Record<string, unknown>;
+      const pickupCode =
+        String(resp.code ?? resp.pickup_code ?? resp.qr_code ?? resp.delivery_code ?? "");
+      if (pickupCode) {
+        localStorage.setItem("delivery_pickup_code", pickupCode);
+      }
+      localStorage.setItem("delivery_pickup_code_raw", JSON.stringify(resp));
+
+      // Sauvegarder la mission et ses infos
+      localStorage.setItem("current_mission", JSON.stringify(mission));
+      if (missionInfo) localStorage.setItem("current_mission_info", JSON.stringify(missionInfo));
+      localStorage.setItem("mission_phase", "pickup");
+      localStorage.removeItem("confirmed_pharmacy_ids");
+
+      // Rediriger vers la carte pour voir le trajet livreur → pharmacie
+      router.push("/tracking");
     } catch (err) {
-      console.error("Erreur acceptation:", err);
-      window.alert("Erreur lors de l'acceptation. Veuillez réessayer.");
+      const msg = err instanceof Error ? err.message : "Erreur inconnue";
+      window.alert(`Impossible d'accepter la mission.\n\n${msg}`);
+      setAppState("pending");
     }
   }
 
-  // ---- Decline mission ----
-  function handleDecline() {
-    if (countdownIntervalRef.current) clearInterval(countdownIntervalRef.current);
-    if (currentMission) {
-      cancelMission(currentMission.id).catch(() => { });
+  // ── Refuse mission ────────────────────────────────────────────────────────
+
+  async function handleRefuse() {
+    if (!mission) return;
+    setRefuseLoading(true);
+    setRefuseError("");
+    try {
+      await cancelMission(mission.id);
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : "Erreur";
+      setRefuseError(msg);
+    } finally {
+      setRefuseLoading(false);
+      setShowRefuseConfirm(false);
     }
-    setCurrentMission(null);
-    setAppState("no-mission");
+    setMission(null);
+    setMissionInfo(null);
+    setOfficines([]);
+    // Recharger après refus
+    fetchLastMission();
   }
 
-  // ---- Logout ----
+  // ── Logout ────────────────────────────────────────────────────────────────
+
   function logout() {
-    if (missionIntervalRef.current) clearInterval(missionIntervalRef.current);
-    if (countdownIntervalRef.current) clearInterval(countdownIntervalRef.current);
+    if (listIntervalRef.current) clearInterval(listIntervalRef.current);
     if (notifIntervalRef.current) clearInterval(notifIntervalRef.current);
     clearAuth();
     router.push("/login");
   }
 
-  // ---- Cleanup ----
-  useEffect(() => {
-    return () => {
-      if (missionIntervalRef.current) clearInterval(missionIntervalRef.current);
-      if (countdownIntervalRef.current) clearInterval(countdownIntervalRef.current);
-      if (notifIntervalRef.current) clearInterval(notifIntervalRef.current);
-    };
-  }, []);
+  // ── Helpers ───────────────────────────────────────────────────────────────
 
-  // ---- Helpers ----
+  const unreadCount = notifications.filter((n) => !n.read).length;
   const gpsColor =
     gpsStatus === "active" ? "bg-emerald-500" :
       gpsStatus === "searching" ? "bg-amber-400 animate-pulse" :
         gpsStatus === "error" ? "bg-red-500" : "bg-slate-400";
-
   const gpsText =
     gpsStatus === "active" ? "GPS Actif" :
       gpsStatus === "searching" ? "Recherche..." :
         gpsStatus === "error" ? "Erreur GPS" : "GPS Inactif";
 
-  function formatTime(secs: number) {
-    const m = Math.floor(secs / 60).toString().padStart(2, "0");
-    const s = (secs % 60).toString().padStart(2, "0");
-    return `${m}:${s}`;
-  }
-
-  const [now, setNow] = useState<number>(0);
-
-  useEffect(() => {
-    setNow(Date.now());
-    const interval = setInterval(() => setNow(Date.now()), 60000);
-    return () => clearInterval(interval);
-  }, []);
-
-  function formatTimeAgo(iso: string, currentNow: number) {
-    if (!iso) return "";
-    const diff = Math.floor((currentNow - new Date(iso).getTime()) / 60000);
-    if (diff < 1) return "À l'instant";
-    if (diff < 60) return `${diff} min`;
-    return new Date(iso).toLocaleDateString("fr-FR");
-  }
-
-  const countdownPct = (countdown / 30) * 100;
-
-  // ---- Sidebar nav items ----
   const navItems = [
-    { icon: "location_on", label: "Géolocalisation", href: "/geolocation" },
-    { icon: "inventory_2", label: "Missions actives", href: "/missions", active: true },
-    { icon: "schedule", label: "Historique", href: "/history" },
-    { icon: "shopping_cart", label: "Livraison", href: "/orders/incoming" },
-    { icon: "settings", label: "Paramètres", href: "/settings" },
+    { icon: MapPin, label: "Géolocalisation", href: "/geolocation" },
+    { icon: Package, label: "Missions", href: "/missions", active: true },
+    { icon: Clock, label: "Historique", href: "/history" },
+    { icon: Settings, label: "Paramètres", href: "/settings" },
   ];
 
-  return (
-    <div className="flex h-screen w-full overflow-hidden bg-[#f0faf4] dark:bg-[#071324] text-slate-900 dark:text-slate-100">
+  // ── Mission display helpers ───────────────────────────────────────────────
 
-      {/* ===== SIDEBAR ===== */}
-      <aside className="hidden md:flex w-64 h-full flex-col justify-between border-r border-green-100 dark:border-[#1a3a6e] bg-white dark:bg-[#081730] p-4">
+  const officineFromInfo = missionInfo?.officine;
+  const patientFromInfo = missionInfo?.patient;
+  const orderFromInfo = missionInfo?.order;
+
+  // Fallback: officines from pickup endpoint or from mission info
+  const displayOfficines: PickupOfficine[] = officines.length > 0
+    ? officines
+    : officineFromInfo
+      ? [{ id: "main", name: officineFromInfo.name, address: officineFromInfo.address, telephone: officineFromInfo.telephone }]
+      : [];
+
+  // ── Render ────────────────────────────────────────────────────────────────
+
+  return (
+    <div className="flex h-screen w-full overflow-hidden bg-[#F8FAFC] text-[#1E293B]">
+
+      {/* SIDEBAR */}
+      <aside className="hidden md:flex w-64 h-full flex-col justify-between border-r border-[#E2E8F0] bg-white p-4">
         <div className="flex flex-col gap-6">
           <div className="px-2">
-            <h1 className="text-xl font-bold text-slate-900 dark:text-white">e-Dr TIM</h1>
-            <p className="text-xs text-slate-500 dark:text-[#7a9bbf] font-medium mt-1">Tableau de bord Livreur</p>
+            <h1 className="text-xl font-bold text-[#1E293B]">e-Dr TIM</h1>
+            <p className="text-xs text-[#94A3B8] font-medium mt-1">Tableau de bord Livreur</p>
           </div>
-          <nav className="flex flex-col gap-2">
-            {navItems.map(({ icon, label, href, active }) => (
+          <nav className="flex flex-col gap-1">
+            {navItems.map(({ icon: Icon, label, href, active }) => (
               <a
                 key={label}
                 href={href}
-                className={`flex items-center gap-3 px-3 py-2.5 rounded-lg transition-all text-sm font-medium ${active
-                  ? "bg-[#2E8B57]/10 dark:bg-[#2E8B57]/20 text-[#2E8B57] font-semibold"
-                  : "hover:bg-green-50 dark:hover:bg-[#0d2040] text-slate-600 dark:text-[#7a9bbf]"
+                className={`flex items-center gap-3 px-3 py-2.5 rounded-xl transition-all text-sm font-medium ${active ? "bg-[#22C55E]/10 text-[#22C55E] font-semibold" : "hover:bg-[#F0FDF4] text-[#64748B] hover:text-[#22C55E]"
                   }`}
               >
-                <span className="material-icons">{icon}</span>
+                <Icon size={18} className={active ? "text-[#22C55E]" : "text-[#94A3B8]"} />
                 <span>{label}</span>
               </a>
             ))}
           </nav>
         </div>
-
-        {/* User card */}
-        <div className="flex flex-col gap-4">
-          <div className="p-3 rounded-xl bg-green-50 dark:bg-[#112b52] border border-green-100 dark:border-[#1a3a6e]">
+        <div className="flex flex-col gap-3">
+          <div className="p-3 rounded-xl bg-[#F0FDF4] border border-[#E2E8F0]">
             <div className="flex items-center gap-3">
-              <div className="w-10 h-10 rounded-full ring-2 ring-[#2E8B57]/20 bg-[#2E8B57]/10 flex items-center justify-center">
-                <span className="material-icons text-[#2E8B57]">person</span>
+              <div className="w-10 h-10 rounded-full ring-2 ring-[#22C55E]/20 bg-[#22C55E]/10 flex items-center justify-center">
+                <User size={18} className="text-[#22C55E]" />
               </div>
               <div className="flex flex-col overflow-hidden flex-1">
-                <p className="text-sm font-bold truncate dark:text-white">
+                <p className="text-sm font-bold truncate text-[#1E293B]">
                   {userInfo ? `${userInfo.firstName} ${userInfo.lastName}` : "Chargement..."}
                 </p>
-                <p className="text-xs text-slate-500 truncate">{userInfo?.telephone || "---"}</p>
+                <p className="text-xs text-[#94A3B8] truncate">{userInfo?.telephone || "---"}</p>
               </div>
             </div>
           </div>
           <button
             onClick={logout}
-            className="flex items-center justify-center gap-2 px-4 py-2 rounded-lg bg-red-50 dark:bg-red-900/20 text-red-600 dark:text-red-400 hover:bg-red-100 dark:hover:bg-red-900/30 transition-colors"
+            className="flex items-center justify-center gap-2 px-4 py-2 rounded-xl bg-red-50 text-red-600 hover:bg-red-100 transition-colors"
           >
-            <span className="material-icons text-sm">logout</span>
+            <LogOut size={16} />
             <span className="text-sm font-medium">Déconnexion</span>
           </button>
         </div>
       </aside>
 
-      {/* ===== MAIN ===== */}
+      {/* MAIN */}
       <main className="flex-1 flex flex-col h-full overflow-hidden">
 
         {/* Header */}
-        <header className="flex items-center justify-between border-b border-green-100 dark:border-[#1a3a6e] bg-white dark:bg-[#0a1d38] px-4 md:px-6 py-3 z-40 shrink-0">
+        <header className="flex items-center justify-between border-b border-[#E2E8F0] bg-white px-4 md:px-6 py-3 z-40 shrink-0">
           <div className="flex items-center gap-3">
-            <h2 className="text-slate-900 dark:text-white text-base md:text-lg font-bold tracking-tight">
-              Missions de Livraison
+            <h2 className="text-[#1E293B] text-base md:text-lg font-bold tracking-tight">
+              {appState === "pending" ? "Mission disponible" :
+                appState === "accepting" ? "Acceptation…" :
+                  "Missions"}
             </h2>
+            {/* Badge statut du livreur */}
+            {driverStatus && (
+              <span
+                className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold border ${driverStatus === "IS_FREE"
+                  ? "bg-emerald-50 text-emerald-700 border-emerald-200"
+                  : "bg-slate-100 text-slate-500 border-slate-200"
+                  }`}
+              >
+                <span
+                  className={`w-2 h-2 rounded-full ${driverStatus === "IS_FREE"
+                    ? "bg-emerald-500 animate-pulse"
+                    : "bg-slate-400"
+                    }`}
+                />
+                {driverStatus === "IS_FREE" ? "Disponible" : "Occupé"}
+              </span>
+            )}
           </div>
           <div className="flex items-center gap-2 md:gap-3">
-
-            {/* GPS badge */}
-            <div className="hidden sm:flex items-center px-3 py-1.5 rounded-full bg-green-50 dark:bg-[#112b52] border border-green-100 dark:border-[#1a3a6e]">
+            <div className="hidden sm:flex items-center px-3 py-1.5 rounded-full bg-[#F0FDF4] border border-[#E2E8F0]">
               <div className={`w-2 h-2 rounded-full mr-2 ${gpsColor}`} />
-              <span className="text-xs font-bold text-slate-500">{gpsText}</span>
-            </div>
-
-            {/* Online status */}
-            <div className={`flex items-center px-3 py-1.5 rounded-full border transition-colors ${isOnline
-              ? "bg-green-50 dark:bg-[#2E8B57]/10 border-[#2E8B57]/20"
-              : "bg-gray-100 dark:bg-[#112b52] border-gray-200 dark:border-[#1a3a6e]"
-              }`}>
-              <div className={`w-2 h-2 rounded-full mr-2 ${isOnline ? "bg-emerald-500 animate-pulse" : "bg-slate-400"}`} />
-              <span className={`text-xs font-bold hidden sm:inline ${isOnline ? "text-emerald-500" : "text-slate-500"}`}>
-                {isOnline ? "En ligne" : "Hors ligne"}
-              </span>
+              <span className="text-xs font-bold text-[#94A3B8]">{gpsText}</span>
             </div>
 
             {/* Notifications */}
             <div className="relative">
               <button
                 onClick={() => setShowNotifDropdown(!showNotifDropdown)}
-                className="relative p-2 text-slate-500 hover:text-slate-700 dark:text-[#7a9bbf] dark:hover:text-white transition-colors rounded-xl hover:bg-green-50 dark:hover:bg-[#1a3a6e]"
+                className="relative p-2 text-[#64748B] hover:text-[#1E293B] transition-colors rounded-xl hover:bg-[#F0FDF4]"
               >
-                <span className="material-icons">notifications</span>
+                <Bell size={18} />
                 {unreadCount > 0 && (
-                  <span className="absolute -top-0.5 -right-0.5 min-w-[18px] h-[18px] bg-red-500 text-white text-[10px] font-bold rounded-full flex items-center justify-center border-2 border-white dark:border-[#0a1d38]">
+                  <span className="absolute -top-0.5 -right-0.5 min-w-[18px] h-[18px] bg-red-500 text-white text-[10px] font-bold rounded-full flex items-center justify-center border-2 border-white">
                     {unreadCount > 99 ? "99+" : unreadCount}
                   </span>
                 )}
               </button>
-
               {showNotifDropdown && (
-                <div className="absolute right-0 top-12 w-80 max-w-[90vw] z-50 rounded-xl border border-green-100 dark:border-[#1a3a6e] bg-white dark:bg-[#0d2040] shadow-2xl overflow-hidden">
-                  <div className="flex items-center justify-between px-3 py-2 border-b border-green-100 dark:border-[#1a3a6e]">
-                    <span className="text-xs font-bold text-slate-700 dark:text-slate-200">Notifications</span>
+                <div className="absolute right-0 top-12 w-80 max-w-[90vw] z-50 rounded-xl border border-[#E2E8F0] bg-white shadow-2xl overflow-hidden">
+                  <div className="flex items-center justify-between px-3 py-2 border-b border-[#E2E8F0]">
+                    <span className="text-xs font-bold text-[#1E293B]">Notifications</span>
                     <button
                       onClick={() => { setNotifications([]); setShowNotifDropdown(false); }}
-                      className="text-[11px] font-semibold text-[#2E8B57] hover:underline"
+                      className="text-[11px] font-semibold text-[#22C55E] hover:underline"
                     >
                       Effacer
                     </button>
                   </div>
                   {notifications.length === 0 ? (
-                    <div className="px-3 py-4 text-xs text-slate-500 dark:text-slate-400">Aucune notification pour le moment.</div>
+                    <div className="px-3 py-4 text-xs text-[#94A3B8]">Aucune notification.</div>
                   ) : (
-                    <div className="max-h-80 overflow-y-auto divide-y divide-slate-100 dark:divide-slate-700">
+                    <div className="max-h-80 overflow-y-auto divide-y divide-[#F1F5F9]">
                       {notifications.slice(0, 20).map((n) => (
-                        <button
+                        <div
                           key={n.id}
-                          onClick={() => { setSelectedNotif(n); setShowNotifModal(true); setShowNotifDropdown(false); }}
-                          className={`w-full text-left px-3 py-3 hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-colors ${!n.read ? "bg-[#2E8B57]/5" : "opacity-60"}`}
+                          className={`px-3 py-3 ${!n.read ? "bg-[#22C55E]/5" : "opacity-60"}`}
                         >
                           <div className="flex items-start gap-2">
-                            <div className="w-8 h-8 rounded-full bg-[#2E8B57]/10 flex items-center justify-center mt-0.5 shrink-0">
-                              <span className="material-icons text-[#2E8B57] text-sm">local_shipping</span>
+                            <div className="w-8 h-8 rounded-full bg-[#22C55E]/10 flex items-center justify-center mt-0.5 shrink-0">
+                              <Truck size={14} className="text-[#22C55E]" />
                             </div>
                             <div className="flex-1 min-w-0">
-                              <p className="text-xs font-bold text-slate-800 dark:text-white truncate">{n.title}</p>
-                              <p className="text-[11px] text-slate-500 dark:text-slate-400 line-clamp-2">{n.content}</p>
-                              <p className="text-[10px] text-slate-400 mt-1">{formatTimeAgo(n.created_at, now)}</p>
+                              <p className="text-xs font-bold text-[#1E293B] truncate">{n.title}</p>
+                              <p className="text-[11px] text-[#94A3B8] line-clamp-2">{n.content}</p>
+                              <p className="text-[10px] text-[#94A3B8] mt-1">{formatTimeAgo(n.created_at, now)}</p>
                             </div>
-                            {!n.read && <span className="w-2 h-2 rounded-full bg-[#2E8B57] shrink-0 mt-1" />}
+                            {!n.read && <span className="w-2 h-2 rounded-full bg-[#22C55E] shrink-0 mt-1" />}
                           </div>
-                        </button>
+                        </div>
                       ))}
                     </div>
                   )}
@@ -408,356 +471,329 @@ export default function MissionsPage() {
 
         {/* Content */}
         <div className="flex-1 overflow-y-auto p-4 md:p-6 lg:p-8">
-          <div className="max-w-4xl mx-auto flex flex-col gap-6">
+          <div className="max-w-2xl mx-auto flex flex-col gap-4">
 
-            {/* Heading */}
-            <div>
-              <h1 className="text-xl md:text-2xl lg:text-3xl font-bold text-slate-900 dark:text-white tracking-tight">
-                Gestion des Missions
-              </h1>
-              <p className="text-slate-500 dark:text-[#9da6b9] text-sm mt-1 max-w-2xl">
-                Activez votre statut pour recevoir des missions de livraison.
-              </p>
-            </div>
+            {/* ── LOADING ── */}
+            {(appState === "loading" || appState === "accepting") && (
+              <div className="bg-white rounded-2xl p-10 shadow-sm border border-[#E2E8F0] flex flex-col items-center gap-4">
+                <Loader2 size={32} className="text-[#22C55E] animate-spin" />
+                <p className="text-[#94A3B8] text-sm">
+                  {appState === "accepting" ? "Acceptation de la mission…" : "Chargement de votre mission…"}
+                </p>
+              </div>
+            )}
 
-            {/* === ACTIVATION CARD === */}
-            {appState === "idle" && (
-              <div className="bg-white dark:bg-[#0d2040] rounded-2xl p-6 shadow-sm border border-green-100 dark:border-[#1a3a6e]">
-                <div className="flex flex-col items-center text-center gap-6">
-                  <div className="w-20 h-20 rounded-full bg-[#2E8B57]/10 flex items-center justify-center">
-                    <span className="material-icons text-[#2E8B57] text-4xl">local_shipping</span>
+            {/* ── NO MISSION ── */}
+            {appState === "no-mission" && (
+              <div className="bg-white rounded-2xl p-10 shadow-sm border border-[#E2E8F0]">
+                <div className="flex flex-col items-center text-center gap-4">
+                  <div className="w-16 h-16 rounded-full bg-[#F8FAFC] flex items-center justify-center">
+                    <HourglassIcon size={28} className="text-[#94A3B8]" />
                   </div>
                   <div>
-                    <h2 className="text-xl font-bold text-slate-900 dark:text-white">Prêt à livrer ?</h2>
-                    <p className="text-slate-500 dark:text-slate-400 text-sm mt-1 max-w-md">
-                      Cliquez sur le bouton ci-dessous pour recevoir des missions de livraison.
+                    <h3 className="text-lg font-bold text-[#1E293B]">En attente d'une mission</h3>
+                    <p className="text-[#94A3B8] text-sm mt-1">
+                      Vous serez notifié dès qu'une mission vous sera assignée.
                     </p>
                   </div>
                   <button
-                    onClick={handleActivate}
-                    className="w-full max-w-xs bg-[#2E8B57] hover:bg-[#20603D] text-white text-lg font-bold py-4 rounded-xl shadow-lg shadow-[#2E8B57]/20 transition-all active:scale-[0.98] flex items-center justify-center gap-2"
+                    onClick={() => fetchLastMission()}
+                    className="text-[#22C55E] hover:underline text-sm font-medium flex items-center gap-1"
                   >
-                    <span className="material-icons">search</span>
-                    <span>Rechercher des missions</span>
+                    <RefreshCw size={14} />Rafraîchir
                   </button>
                 </div>
               </div>
             )}
 
-            {/* === LOADING STATE === */}
-            {appState === "loading" && (
-              <div className="bg-white dark:bg-[#0d2040] rounded-2xl p-8 shadow-sm border border-green-100 dark:border-[#1a3a6e]">
-                <div className="flex flex-col items-center text-center gap-4">
-                  <div className="w-8 h-8 border-4 border-slate-200 border-t-[#2E8B57] rounded-full animate-spin" />
-                  <p className="text-slate-500 dark:text-slate-400 text-sm">Recherche de missions disponibles...</p>
-                </div>
-              </div>
-            )}
-
-            {/* === MISSION ACTIVE — DÉTAILS COMPLETS === */}
-            {appState === "active" && (
+            {/* ── MISSION PENDING ── */}
+            {appState === "pending" && mission && (
               <div className="flex flex-col gap-4">
-                {/* En-tête statut */}
-                <div className="bg-white dark:bg-[#0d2040] rounded-2xl p-4 shadow-sm border border-green-100 dark:border-[#1a3a6e] flex items-center justify-between">
-                  <div className="flex items-center gap-3">
-                    <div className="w-3 h-3 rounded-full bg-emerald-500 animate-pulse" />
-                    <span className="text-sm font-bold text-slate-800 dark:text-white">Mission en cours</span>
+
+                {/* Bannière mission disponible */}
+                <div className="bg-gradient-to-r from-[#22C55E] to-[#16A34A] rounded-2xl p-5 text-white shadow-lg shadow-[#22C55E]/20">
+                  <div className="flex items-center gap-2 mb-1">
+                    <span className="flex h-2 w-2 rounded-full bg-white animate-ping" />
+                    <span className="text-xs font-bold uppercase tracking-wider opacity-90">Nouvelle mission assignée</span>
                   </div>
-                  <button
-                    onClick={() => { localStorage.removeItem("current_mission"); setAppState("idle"); setIsOnline(false); setMissionInfo(null); }}
-                    className="text-xs text-red-500 hover:underline font-semibold"
-                  >
-                    Terminer
-                  </button>
+                  <div className="flex items-end justify-between mt-1">
+                    <div>
+                      <p className="text-2xl font-black leading-tight">Mission disponible</p>
+                      <p className="text-white/70 text-xs mt-1 font-mono">
+                        #{mission.id.substring(0, 12)}
+                      </p>
+                    </div>
+                    {mission.created_at && (
+                      <span className="text-white/70 text-xs">{formatTimeAgo(mission.created_at, now)}</span>
+                    )}
+                  </div>
                 </div>
 
-                {missionInfoLoading && (
-                  <div className="bg-white dark:bg-[#0d2040] rounded-2xl p-6 shadow-sm border border-green-100 dark:border-[#1a3a6e] flex items-center justify-center gap-3">
-                    <div className="w-6 h-6 border-4 border-slate-200 border-t-[#2E8B57] rounded-full animate-spin" />
-                    <span className="text-sm text-slate-500">Chargement des détails...</span>
+                {/* Chargement des détails */}
+                {missionLoading && (
+                  <div className="bg-white rounded-2xl p-5 shadow-sm border border-[#E2E8F0] flex items-center justify-center gap-2">
+                    <Loader2 size={18} className="text-[#22C55E] animate-spin" />
+                    <span className="text-sm text-[#94A3B8]">Chargement des détails…</span>
                   </div>
                 )}
 
-                {missionInfo && !missionInfoLoading && (
-                  <>
-                    {/* Carte Officine */}
-                    <div className="bg-white dark:bg-[#0d2040] rounded-2xl p-5 shadow-sm border border-green-100 dark:border-[#1a3a6e]">
-                      <div className="flex items-center gap-3 mb-4">
-                        <div className="p-2 bg-[#2E8B57]/10 rounded-xl">
-                          <span className="material-icons text-[#2E8B57]">local_pharmacy</span>
-                        </div>
-                        <h3 className="font-bold text-slate-900 dark:text-white">Officine de collecte</h3>
-                      </div>
-                      <div className="space-y-2 text-sm text-slate-600 dark:text-[#7a9bbf]">
-                        <p className="font-semibold text-slate-800 dark:text-white text-base">
-                          {missionInfo.officine?.name || "Officine"}
-                        </p>
-                        {missionInfo.officine?.address && (
-                          <p className="flex items-start gap-2">
-                            <span className="material-icons text-sm shrink-0 mt-0.5">place</span>
-                            {missionInfo.officine.address}
-                          </p>
-                        )}
-                        {missionInfo.officine?.telephone && (
-                          <a href={`tel:${missionInfo.officine.telephone}`} className="flex items-center gap-2 text-[#2E8B57] hover:underline">
-                            <span className="material-icons text-sm">phone</span>
-                            {missionInfo.officine.telephone}
-                          </a>
-                        )}
-                        {missionInfo.officine?.latitude && missionInfo.officine?.longitude && (
-                          <a
-                            href={`https://maps.google.com/?q=${missionInfo.officine.latitude},${missionInfo.officine.longitude}`}
-                            target="_blank" rel="noopener noreferrer"
-                            className="inline-flex items-center gap-2 mt-2 px-3 py-1.5 bg-blue-50 dark:bg-[#1a3a6e]/40 text-blue-600 dark:text-blue-400 rounded-lg text-xs font-semibold hover:bg-blue-100 transition-colors"
-                          >
-                            <span className="material-icons text-sm">map</span>
-                            Ouvrir dans Maps
-                          </a>
-                        )}
-                      </div>
-                    </div>
+                {/* ID mission */}
+                <div className="bg-white rounded-2xl p-4 shadow-sm border border-[#E2E8F0] flex items-center gap-3">
+                  <div className="w-9 h-9 rounded-xl bg-[#22C55E]/10 flex items-center justify-center shrink-0">
+                    <Hash size={16} className="text-[#22C55E]" />
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-[10px] text-[#94A3B8] uppercase font-bold tracking-wider">ID Mission</p>
+                    <p className="font-mono font-bold text-[#1E293B] text-sm truncate">{mission.id}</p>
+                  </div>
+                  {mission.status && (
+                    <span className="text-xs font-bold px-2.5 py-1 rounded-full bg-amber-100 text-amber-700">
+                      {mission.status}
+                    </span>
+                  )}
+                </div>
 
-                    {/* Carte Patient */}
-                    <div className="bg-white dark:bg-[#0d2040] rounded-2xl p-5 shadow-sm border border-green-100 dark:border-[#1a3a6e]">
-                      <div className="flex items-center gap-3 mb-4">
-                        <div className="p-2 bg-blue-50 dark:bg-[#1a3a6e]/40 rounded-xl">
-                          <span className="material-icons text-blue-500 dark:text-blue-400">person</span>
-                        </div>
-                        <h3 className="font-bold text-slate-900 dark:text-white">Patient destinataire</h3>
-                      </div>
-                      <div className="space-y-2 text-sm text-slate-600 dark:text-[#7a9bbf]">
-                        <p className="font-semibold text-slate-800 dark:text-white text-base">
-                          {missionInfo.patient?.first_name} {missionInfo.patient?.last_name}
-                        </p>
-                        {missionInfo.patient?.address && (
-                          <p className="flex items-start gap-2">
-                            <span className="material-icons text-sm shrink-0 mt-0.5">home</span>
-                            {missionInfo.patient.address}
-                          </p>
-                        )}
-                        {missionInfo.patient?.telephone && (
-                          <a href={`tel:${missionInfo.patient.telephone}`} className="flex items-center gap-2 text-[#2E8B57] hover:underline">
-                            <span className="material-icons text-sm">phone</span>
-                            {missionInfo.patient.telephone}
-                          </a>
-                        )}
-                        {missionInfo.patient?.latitude && missionInfo.patient?.longitude && (
-                          <a
-                            href={`https://maps.google.com/?q=${missionInfo.patient.latitude},${missionInfo.patient.longitude}`}
-                            target="_blank" rel="noopener noreferrer"
-                            className="inline-flex items-center gap-2 mt-2 px-3 py-1.5 bg-blue-50 dark:bg-[#1a3a6e]/40 text-blue-600 dark:text-blue-400 rounded-lg text-xs font-semibold hover:bg-blue-100 transition-colors"
-                          >
-                            <span className="material-icons text-sm">map</span>
-                            Ouvrir dans Maps
-                          </a>
-                        )}
-                      </div>
+                {/* Officines de collecte */}
+                {displayOfficines.length > 0 && (
+                  <div className="bg-white rounded-2xl shadow-sm border border-[#E2E8F0] overflow-hidden">
+                    <div className="px-4 py-3 border-b border-[#E2E8F0] flex items-center gap-2">
+                      <Building2 size={15} className="text-[#22C55E]" />
+                      <span className="text-sm font-bold text-[#1E293B]">
+                        Officines à visiter ({displayOfficines.length})
+                      </span>
                     </div>
-
-                    {/* Commande */}
-                    {missionInfo.order && (
-                      <div className="bg-white dark:bg-[#0d2040] rounded-2xl p-5 shadow-sm border border-green-100 dark:border-[#1a3a6e]">
-                        <div className="flex items-center justify-between mb-4">
-                          <div className="flex items-center gap-3">
-                            <div className="p-2 bg-amber-50 dark:bg-amber-900/20 rounded-xl">
-                              <span className="material-icons text-amber-500">inventory_2</span>
-                            </div>
-                            <h3 className="font-bold text-slate-900 dark:text-white">Médicaments à livrer</h3>
+                    <div className="divide-y divide-[#F8FAFC]">
+                      {displayOfficines.map((off, idx) => (
+                        <div key={off.id ?? idx} className="p-4 flex items-start gap-3">
+                          <div className="w-7 h-7 rounded-lg bg-[#22C55E]/10 flex items-center justify-center text-xs font-black text-[#22C55E] shrink-0">
+                            {idx + 1}
                           </div>
-                          {missionInfo.order.total_amount && (
-                            <span className="text-sm font-bold text-[#2E8B57]">
-                              {missionInfo.order.total_amount} FCFA
+                          <div className="flex-1 min-w-0">
+                            <p className="font-bold text-[#1E293B] text-sm truncate">
+                              {off.name ?? `Officine ${idx + 1}`}
+                            </p>
+                            {off.address && (
+                              <p className="text-xs text-[#94A3B8] flex items-center gap-1 mt-0.5">
+                                <MapPin size={10} className="shrink-0" />
+                                <span className="truncate">{off.address}</span>
+                              </p>
+                            )}
+                            {off.telephone && (
+                              <a
+                                href={`tel:${off.telephone}`}
+                                className="text-xs text-[#22C55E] flex items-center gap-1 mt-0.5 hover:underline"
+                              >
+                                <Phone size={10} />{off.telephone}
+                              </a>
+                            )}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {/* Patient */}
+                {patientFromInfo && (
+                  <div className="bg-white rounded-2xl p-4 shadow-sm border border-[#E2E8F0]">
+                    <div className="flex items-center gap-3 mb-3">
+                      <div className="w-9 h-9 rounded-xl bg-blue-50 flex items-center justify-center shrink-0">
+                        <User size={16} className="text-blue-500" />
+                      </div>
+                      <div>
+                        <p className="text-[10px] text-[#94A3B8] uppercase font-bold tracking-wider">Patient destinataire</p>
+                        <p className="font-bold text-[#1E293B] text-sm">
+                          {[patientFromInfo.first_name, patientFromInfo.last_name].filter(Boolean).join(" ") || "—"}
+                        </p>
+                      </div>
+                    </div>
+                    {patientFromInfo.address && (
+                      <p className="text-xs text-[#64748B] flex items-start gap-1.5">
+                        <MapPin size={11} className="shrink-0 mt-0.5 text-[#94A3B8]" />
+                        {patientFromInfo.address}
+                      </p>
+                    )}
+                    {patientFromInfo.telephone && (
+                      <a href={`tel:${patientFromInfo.telephone}`} className="text-xs text-[#22C55E] flex items-center gap-1.5 mt-1.5 hover:underline">
+                        <Phone size={11} />{patientFromInfo.telephone}
+                      </a>
+                    )}
+                  </div>
+                )}
+
+                {/* Commande */}
+                {orderFromInfo && (
+                  <div className="bg-white rounded-2xl p-4 shadow-sm border border-[#E2E8F0]">
+                    <div className="flex items-center justify-between mb-3">
+                      <div className="flex items-center gap-2">
+                        <Package size={15} className="text-amber-500" />
+                        <span className="text-sm font-bold text-[#1E293B]">Commande</span>
+                      </div>
+                      {orderFromInfo.total_amount && (
+                        <span className="text-sm font-black text-[#22C55E]">
+                          {Number(orderFromInfo.total_amount).toLocaleString("fr-FR")} FCFA
+                        </span>
+                      )}
+                    </div>
+                    {orderFromInfo.items && orderFromInfo.items.length > 0 && (
+                      <div className="space-y-1.5">
+                        {orderFromInfo.items.map((item, i) => (
+                          <div key={i} className="flex items-center justify-between text-xs">
+                            <span className="text-[#1E293B]">{item.product_name || "Produit"}</span>
+                            <span className="text-[#94A3B8] bg-[#F8FAFC] px-2 py-0.5 rounded-full font-semibold">
+                              ×{item.quantity}
                             </span>
-                          )}
-                        </div>
-                        {missionInfo.order.items && missionInfo.order.items.length > 0 ? (
-                          <div className="space-y-2">
-                            {missionInfo.order.items.map((item, idx) => (
-                              <div key={idx} className="flex items-center justify-between py-2 border-b border-slate-100 dark:border-slate-700 last:border-0">
-                                <span className="text-sm text-slate-700 dark:text-slate-300">{item.product_name || "Produit"}</span>
-                                <span className="text-xs text-slate-500 dark:text-slate-400">x{item.quantity}</span>
-                              </div>
-                            ))}
                           </div>
-                        ) : (
-                          <p className="text-sm text-slate-400">Aucun détail produit disponible.</p>
-                        )}
+                        ))}
                       </div>
                     )}
-                  </>
+                    {orderFromInfo.status && (
+                      <p className="text-[10px] text-[#94A3B8] mt-2 uppercase font-semibold tracking-wide">
+                        Statut : {orderFromInfo.status}
+                      </p>
+                    )}
+                  </div>
                 )}
 
-                {/* Boutons d'action */}
-                <div className="grid grid-cols-2 gap-3">
-                  <a
-                    href="/pickup-scan"
-                    className="flex flex-col items-center justify-center gap-2 p-4 rounded-2xl bg-[#2E8B57] text-white font-bold shadow-lg shadow-[#2E8B57]/20 hover:bg-[#20603D] transition-colors"
-                  >
-                    <span className="material-icons text-3xl">qr_code_scanner</span>
-                    <span className="text-sm text-center">Scanner QR<br />à l&apos;Officine</span>
-                  </a>
-                  <a
-                    href={`/delivery-scan/${missionInfo?.order?.id || currentMission?.id || ""}`}
-                    className="flex flex-col items-center justify-center gap-2 p-4 rounded-2xl bg-blue-600 text-white font-bold shadow-lg shadow-blue-600/20 hover:bg-blue-700 transition-colors"
-                  >
-                    <span className="material-icons text-3xl">local_shipping</span>
-                    <span className="text-sm text-center">Scanner QR<br />Chez le Patient</span>
-                  </a>
-                </div>
-              </div>
-            )}
+                {/* Erreur refus */}
+                {refuseError && (
+                  <div className="p-3 rounded-xl bg-red-50 border border-red-100 flex items-center gap-2 text-red-600 text-sm">
+                    <AlertTriangle size={14} />
+                    <span>{refuseError}</span>
+                    <button onClick={() => setRefuseError("")} className="ml-auto">
+                      <X size={14} />
+                    </button>
+                  </div>
+                )}
 
-            {/* === NO MISSION === */}
-            {appState === "no-mission" && (
-              <div className="bg-white dark:bg-[#0d2040] rounded-2xl p-8 shadow-sm border border-green-100 dark:border-[#1a3a6e]">
-                <div className="flex flex-col items-center text-center gap-4">
-                  <div className="w-16 h-16 rounded-full bg-slate-100 dark:bg-slate-800 flex items-center justify-center">
-                    <span className="material-icons text-slate-400 text-3xl">hourglass_empty</span>
-                  </div>
-                  <div>
-                    <h3 className="text-lg font-bold text-slate-900 dark:text-white">Aucune mission disponible</h3>
-                    <p className="text-slate-500 dark:text-slate-400 text-sm mt-1">
-                      Restez en ligne, nous vous notifierons dès qu&apos;une nouvelle mission sera disponible.
-                    </p>
-                  </div>
+                {/* Boutons Accept / Refuse */}
+                <div className="grid grid-cols-2 gap-3">
                   <button
-                    onClick={async () => { setAppState("loading"); await checkForMission(); }}
-                    className="text-[#2E8B57] hover:underline text-sm font-medium flex items-center gap-1"
+                    onClick={() => setShowRefuseConfirm(true)}
+                    className="flex items-center justify-center gap-2 py-4 rounded-2xl border-2 border-red-200 text-red-500 font-bold text-sm hover:bg-red-50 transition-all active:scale-[0.98]"
                   >
-                    <span className="material-icons text-sm">refresh</span>
-                    Rafraîchir
+                    <XCircle size={20} />
+                    Refuser
+                  </button>
+                  <button
+                    onClick={handleAccept}
+                    className="flex items-center justify-center gap-2 py-4 rounded-2xl bg-[#22C55E] text-white font-bold text-sm shadow-lg shadow-[#22C55E]/25 hover:bg-[#16A34A] transition-all active:scale-[0.98]"
+                  >
+                    <CheckCircle size={20} />
+                    Accepter
+                    <ArrowRight size={16} />
                   </button>
                 </div>
+
+                {/* Instructions */}
+                <div className="bg-[#F8FAFC] rounded-2xl p-4 border border-[#E2E8F0]">
+                  <p className="text-xs font-bold text-[#1E293B] mb-2 flex items-center gap-2">
+                    <ScanLine size={13} className="text-[#22C55E]" />
+                    Déroulement de la mission
+                  </p>
+                  <div className="space-y-2">
+                    {[
+                      { step: "1", text: "Acceptez la mission" },
+                      { step: "2", text: "Récupérez les médicaments dans chaque officine (code QR généré automatiquement)" },
+                      { step: "3", text: "Livrez le patient et scannez son QR code" },
+                    ].map((s) => (
+                      <div key={s.step} className="flex items-start gap-2 text-xs text-[#64748B]">
+                        <span className="w-5 h-5 rounded-full bg-[#22C55E]/10 text-[#22C55E] font-black flex items-center justify-center text-[10px] shrink-0">{s.step}</span>
+                        <span>{s.text}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+
               </div>
             )}
 
           </div>
         </div>
+
+        {/* Mobile bottom nav */}
+        <nav className="flex md:hidden border-t border-[#E2E8F0] bg-white shrink-0">
+          {navItems.map(({ icon: Icon, label, href, active }) => (
+            <a
+              key={label}
+              href={href}
+              className={`flex-1 flex flex-col items-center py-2.5 gap-0.5 text-[10px] font-semibold transition-colors ${active ? "text-[#22C55E]" : "text-[#94A3B8]"
+                }`}
+            >
+              <Icon size={20} />
+              <span>{label}</span>
+            </a>
+          ))}
+        </nav>
+
       </main>
 
-      {/* ===== INCOMING MISSION MODAL ===== */}
-      {appState === "incoming" && currentMission && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-background-dark/85 backdrop-blur-md p-4">
-          <div className="w-full max-w-md bg-[#1c2620] rounded-2xl shadow-2xl border border-white/10 overflow-hidden flex flex-col relative">
-            <div className="absolute -inset-1 bg-[#2E8B57]/20 blur-xl -z-10 rounded-full opacity-50" />
-
-            {/* Header */}
-            <div className="px-6 pt-8 pb-2 text-center">
-              <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-[#2E8B57]/10 border border-[#2E8B57]/20 mb-4">
-                <span className="relative flex h-2 w-2">
-                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-[#2E8B57] opacity-75" />
-                  <span className="relative inline-flex rounded-full h-2 w-2 bg-[#2E8B57]" />
-                </span>
-                <span className="text-[#2E8B57] text-xs font-bold uppercase tracking-wide">Nouvelle Mission</span>
+      {/* MODAL Confirmation refus */}
+      {showRefuseConfirm && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
+          <div className="w-full max-w-sm bg-white rounded-2xl shadow-2xl p-6 flex flex-col gap-4">
+            <div className="flex items-start gap-3">
+              <div className="w-10 h-10 rounded-xl bg-red-100 flex items-center justify-center shrink-0">
+                <AlertTriangle size={20} className="text-red-500" />
               </div>
-              <h2 className="text-white text-2xl font-bold">Mission de Livraison</h2>
-            </div>
-
-            {/* Info card */}
-            <div className="px-6 py-4">
-              <div className="flex items-center gap-4 p-4 rounded-xl bg-[#111714] border border-white/5">
-                <div className="bg-white p-2 rounded-lg size-16 shrink-0 flex items-center justify-center">
-                  <span className="material-icons text-[#2E8B57] text-3xl">local_pharmacy</span>
-                </div>
-                <div className="flex flex-col">
-                  <h3 className="text-white text-lg font-bold">
-                    {currentMission.pharmacy_name || currentMission.title || "Mission de livraison"}
-                  </h3>
-                  <p className="text-[#9eb7a8] text-sm">
-                    {currentMission.pickup_address || currentMission.address || "Adresse à récupérer"}
-                  </p>
-                  <div className="flex gap-2 mt-2">
-                    <div className="flex items-center justify-center px-2 py-0.5 rounded-md bg-[#29382f] border border-white/5">
-                      <p className="text-white text-xs font-medium">#{currentMission.id?.substring(0, 8) || "---"}</p>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            </div>
-
-            {/* Metrics */}
-            <div className="px-6 py-2">
-              <div className="grid grid-cols-3 gap-3">
-                {[
-                  { icon: "near_me", value: currentMission.distance_km ?? "--", label: "Km" },
-                  { icon: "schedule", value: currentMission.estimated_minutes ?? "--", label: "Min" },
-                  { icon: "inventory_2", value: currentMission.items_count ?? currentMission.total_items ?? "1", label: "Articles" },
-                ].map(({ icon, value, label }) => (
-                  <div key={label} className="flex flex-col items-center justify-center p-3 rounded-xl bg-[#29382f]/50 border border-white/5">
-                    <span className="material-icons text-[#2E8B57] mb-1">{icon}</span>
-                    <span className="text-white font-bold text-lg">{String(value)}</span>
-                    <span className="text-[#9eb7a8] text-xs uppercase font-medium">{label}</span>
-                  </div>
-                ))}
-              </div>
-            </div>
-
-            {/* Countdown + actions */}
-            <div className="px-6 pt-2 pb-6 flex flex-col gap-4">
-              {/* Progress bar */}
               <div>
-                <div className="w-full bg-[#111714] rounded-full h-1.5 overflow-hidden">
-                  <div
-                    className="bg-[#2E8B57] h-1.5 rounded-full shadow-[0_0_10px_rgba(46,139,87,0.5)] transition-all duration-1000"
-                    style={{ width: `${countdownPct}%` }}
-                  />
-                </div>
-                <div className="flex justify-between text-xs text-[#9eb7a8] mt-1">
-                  <span>Réponse automatique dans</span>
-                  <span className="font-mono text-white">{formatTime(countdown)}</span>
-                </div>
+                <p className="font-bold text-[#1E293B]">Refuser cette mission ?</p>
+                <p className="text-sm text-[#94A3B8] mt-1">
+                  La mission sera libérée pour un autre livreur. Cette action est irréversible.
+                </p>
               </div>
-
-              {/* Buttons */}
+            </div>
+            <div className="flex gap-3">
               <button
-                onClick={handleAccept}
-                className="w-full bg-[#2E8B57] hover:bg-[#20603D] text-[#111714] text-lg font-bold py-4 rounded-xl shadow-lg shadow-[#2E8B57]/20 transition-all active:scale-[0.98] flex items-center justify-center gap-2"
+                onClick={() => setShowRefuseConfirm(false)}
+                disabled={refuseLoading}
+                className="flex-1 py-3 rounded-xl border border-[#E2E8F0] text-[#64748B] font-semibold text-sm hover:bg-[#F8FAFC] transition-colors disabled:opacity-50"
               >
-                <span>Accepter la Mission</span>
-                <span className="material-icons">arrow_forward</span>
+                Annuler
               </button>
               <button
-                onClick={handleDecline}
-                className="w-full bg-transparent hover:bg-white/5 text-[#9eb7a8] hover:text-white text-sm font-medium py-3 rounded-xl transition-colors"
+                onClick={handleRefuse}
+                disabled={refuseLoading}
+                className="flex-1 py-3 rounded-xl bg-red-500 text-white font-bold text-sm hover:bg-red-600 transition-colors disabled:opacity-60 flex items-center justify-center gap-2"
               >
-                Refuser la mission
+                {refuseLoading
+                  ? <><Loader2 size={14} className="animate-spin" />Refus…</>
+                  : <><XCircle size={14} />Confirmer le refus</>
+                }
               </button>
             </div>
           </div>
         </div>
       )}
 
-      {/* ===== NOTIFICATION MODAL ===== */}
-      {showNotifModal && selectedNotif && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-          <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={() => setShowNotifModal(false)} />
-          <div className="relative bg-white dark:bg-[#0d2040] rounded-2xl shadow-2xl max-w-sm w-full p-6 flex flex-col gap-4 border border-green-100 dark:border-[#1a3a6e] z-10">
-            <div className="flex items-center gap-4">
-              <div className="w-12 h-12 rounded-full bg-[#2E8B57]/10 flex items-center justify-center shrink-0">
-                <span className="material-icons text-[#2E8B57] text-2xl">notifications</span>
-              </div>
-              <div className="flex-1 min-w-0">
-                <h3 className="text-lg font-bold text-slate-900 dark:text-white">{selectedNotif.title}</h3>
-                <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">{formatTimeAgo(selectedNotif.created_at, now)}</p>
-              </div>
-              <button
-                onClick={() => setShowNotifModal(false)}
-                className="p-2 rounded-full hover:bg-slate-100 dark:hover:bg-slate-700 text-slate-400 transition-colors"
-              >
-                <span className="material-icons">close</span>
-              </button>
-            </div>
-            <p className="text-sm text-slate-600 dark:text-slate-300 leading-relaxed">{selectedNotif.content}</p>
-            <button
-              onClick={() => setShowNotifModal(false)}
-              className="w-full py-2.5 rounded-xl bg-gray-100 dark:bg-[#112b52] text-gray-700 dark:text-[#7a9bbf] font-semibold text-sm hover:bg-gray-200 dark:hover:bg-[#1a3a6e] transition-colors"
-            >
-              Fermer
-            </button>
-          </div>
-        </div>
+      {/* Fermer notif dropdown au click externe */}
+      {showNotifDropdown && (
+        <div className="fixed inset-0 z-30" onClick={() => setShowNotifDropdown(false)} />
       )}
-
     </div>
   );
 }
+
+// Sub-component kept for future listing use (currently unused)
+function MissionCard({ mission, onSelect }: { mission: RawMission; onSelect: () => void }) {
+  return (
+    <button
+      onClick={onSelect}
+      className="w-full bg-white rounded-2xl p-4 shadow-sm border border-[#E2E8F0] flex items-center gap-4 text-left hover:border-[#22C55E]/40 hover:shadow-md transition-all active:scale-[0.99]"
+    >
+      <div className="w-11 h-11 rounded-xl bg-[#22C55E]/10 flex items-center justify-center shrink-0">
+        <Truck size={20} className="text-[#22C55E]" />
+      </div>
+      <div className="flex-1 min-w-0">
+        <p className="font-bold text-[#1E293B] text-sm truncate">Mission #{mission.id.substring(0, 12)}</p>
+        {mission.created_at && (
+          <p className="text-xs text-[#94A3B8] mt-0.5">{mission.created_at}</p>
+        )}
+      </div>
+      <ChevronRight size={18} className="text-[#94A3B8] shrink-0" />
+    </button>
+  );
+}
+
+// Suppress unused warning
+void MissionCard;

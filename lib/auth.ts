@@ -10,6 +10,8 @@ const KEYS = {
   USER_INFO: "delivery_user_info",
   PHONE: "delivery_phone_number",
   USER_ID: "delivery_user_id",
+  DELIVERY_ACCOUNT_ID: "delivery_account_id",
+  DELIVERY_STATUS: "delivery_status",
 };
 
 export interface UserInfo {
@@ -72,6 +74,28 @@ export function getPhone(): string | null {
 
 export function setPhone(phone: string): void {
   localStorage.setItem(KEYS.PHONE, phone);
+}
+
+// ========================
+// DELIVERY ACCOUNT ID & STATUS
+// ========================
+
+export function getDeliveryAccountId(): string | null {
+  if (typeof window === "undefined") return null;
+  return localStorage.getItem(KEYS.DELIVERY_ACCOUNT_ID);
+}
+
+export function setDeliveryAccountId(id: string): void {
+  localStorage.setItem(KEYS.DELIVERY_ACCOUNT_ID, id);
+}
+
+export function getDeliveryStatus(): string | null {
+  if (typeof window === "undefined") return null;
+  return localStorage.getItem(KEYS.DELIVERY_STATUS);
+}
+
+export function saveDeliveryStatus(status: string): void {
+  localStorage.setItem(KEYS.DELIVERY_STATUS, status);
 }
 
 // ========================

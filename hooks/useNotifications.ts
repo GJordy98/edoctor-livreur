@@ -95,7 +95,11 @@ export function useNotifications() {
         return merged;
       });
     } catch (e) {
-      console.error("Erreur récupération notifications:", e);
+      // Ignorer silencieusement les erreurs réseau (Render cold start, hors-ligne)
+      // Une vraie erreur serveur (non-TypeError) resterait visible
+      if (!(e instanceof TypeError)) {
+        console.error("Erreur récupération notifications:", e);
+      }
     }
   }, [mergeWithApi, saveToStorage]);
 
@@ -165,10 +169,18 @@ export function useNotifications() {
     // Auto-refresh toutes les 30s
     intervalRef.current = setInterval(fetchFromApi, REFRESH_INTERVAL_MS);
 
+    // Écouter les messages FCM en foreground envoyés par useFCM
+    const handleFcmMessage = (event: Event) => {
+      const { title, body } = (event as CustomEvent<{ title: string; body: string; data?: Record<string, unknown> }>).detail;
+      addFcmNotification(title, body || '');
+    };
+    window.addEventListener('delivery:fcm-message', handleFcmMessage);
+
     return () => {
       if (intervalRef.current) clearInterval(intervalRef.current);
+      window.removeEventListener('delivery:fcm-message', handleFcmMessage);
     };
-  }, [fetchFromApi, loadFromStorage]);
+  }, [fetchFromApi, loadFromStorage, addFcmNotification]);
 
   return {
     notifications,

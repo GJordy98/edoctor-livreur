@@ -1,18 +1,30 @@
-/**
- * Firebase Configuration — e-Dr TIM Delivery System
- * Migré depuis geolocation.js
- */
+import { initializeApp, getApps, getApp } from 'firebase/app';
+import { getMessaging, type Messaging } from 'firebase/messaging';
 
-export const firebaseConfig = {
-  apiKey: "AIzaSyAr8rU1Bqwx_ZczoMWuRkWGvGxN3jTlg38",
-  authDomain: "e-dr-tim-pharmacy.firebaseapp.com",
-  projectId: "e-dr-tim-pharmacy",
-  storageBucket: "e-dr-tim-pharmacy.firebasestorage.app",
-  messagingSenderId: "412254956944",
-  appId: "1:412254956944:web:60d385128056eb8b3cd715",
-  measurementId: "G-KWSQ9YZDEN",
+const firebaseConfig = {
+    apiKey: 'AIzaSyDttvXdza5YXxz84r-5BIfcvy7Xhbvmb-Y',
+    authDomain: 'e-dr-pharma-fcm.firebaseapp.com',
+    projectId: 'e-dr-pharma-fcm',
+    storageBucket: 'e-dr-pharma-fcm.firebasestorage.app',
+    messagingSenderId: '42167148530',
+    appId: '1:42167148530:web:e9fa630f803fa0469c156b',
 };
 
-// Clé VAPID pour les notifications web push
-export const VAPID_KEY =
-  "BPebo7QTfaYUjEmfnz1cMbl07r3aGYXhU4gKWDyNaATgDXScIo4-kTD0HD8ejKqZNfcfGOIXsDSngm4U9Xch2zs";
+const app = getApps().length > 0 ? getApp() : initializeApp(firebaseConfig);
+
+let messaging: Messaging | null = null;
+
+export function getFirebaseMessaging(): Messaging | null {
+    if (typeof window === 'undefined') return null;
+    if (!messaging) {
+        try {
+            messaging = getMessaging(app);
+        } catch (err) {
+            console.error('[Firebase] Erreur initialisation Messaging:', err);
+            return null;
+        }
+    }
+    return messaging;
+}
+
+export { app };

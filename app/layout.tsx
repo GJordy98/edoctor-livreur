@@ -1,17 +1,23 @@
 import type { Metadata } from "next";
-import { Outfit } from "next/font/google";
-import { ThemeProvider } from "@/context/ThemeContext";
+import { Inter } from "next/font/google";
 import "./globals.css";
+import FCMInitializer from "@/components/FCMInitializer";
 
-const outfit = Outfit({
-  variable: "--font-outfit",
+const inter = Inter({
+  variable: "--font-inter",
   subsets: ["latin"],
-  weight: ["100", "300", "400", "500", "600", "700", "900"],
+  weight: ["300", "400", "500", "600", "700", "800"],
+  display: "swap",
 });
 
 export const metadata: Metadata = {
   title: "e-Dr TIM Delivery",
   description: "Application de livraison e-Dr TIM — Gestion des livreurs",
+  icons: {
+    icon: "/logo.png",
+    shortcut: "/logo.png",
+    apple: "/logo.png",
+  },
 };
 
 export default function RootLayout({
@@ -20,30 +26,22 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="fr" suppressHydrationWarning>
+    <html lang="fr">
       <head>
-        {/* Script de thème : s'exécute avant React pour éviter le flash et la hydration mismatch */}
-        <script dangerouslySetInnerHTML={{ __html: `
-          try {
-            var t = localStorage.getItem('edr_theme');
-            if (!t) t = window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
-            if (t === 'dark') document.documentElement.classList.add('dark');
-          } catch(e) {}
-        ` }} />
-        {/* Material Icons */}
+        {/* Leaflet CSS */}
         <link
-          href="https://fonts.googleapis.com/icon?family=Material+Icons"
           rel="stylesheet"
-        />
-        <link
-          href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200&display=swap"
-          rel="stylesheet"
+          href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
+          integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY="
+          crossOrigin=""
         />
       </head>
-      <body className={`${outfit.variable} antialiased`}>
-        <ThemeProvider>
-          {children}
-        </ThemeProvider>
+      <body
+        className={`${inter.variable} antialiased bg-[#F8FAFC] text-[#1E293B]`}
+        style={{ fontFamily: "var(--font-inter), Inter, sans-serif" }}
+      >
+        {children}
+        <FCMInitializer />
       </body>
     </html>
   );
