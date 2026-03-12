@@ -10,14 +10,9 @@ import { useRouter } from "next/navigation";
 import "leaflet/dist/leaflet.css";
 import { useGeolocation } from "@/hooks/useGeolocation";
 import { useNotifications } from "@/hooks/useNotifications";
-import { getUserInfo, clearAuth, getDeliveryStatus, type UserInfo } from "@/lib/auth";
+import { getDeliveryStatus } from "@/lib/auth";
 import {
   MapPin,
-  Package,
-  Clock,
-  Settings,
-  User,
-  LogOut,
   Bell,
   Crosshair,
   Plus,
@@ -46,10 +41,8 @@ export default function GeolocationPage() {
   const mapRef = useRef<HTMLDivElement>(null);
   const leafletMap = useRef<LeafletMap>(null);
   const markerRef = useRef<LeafletMap>(null);
-  const [userInfo, setUserInfo] = useState<UserInfo | null>(null);
 
   useEffect(() => {
-    setUserInfo(getUserInfo());
     setDriverStatus(getDeliveryStatus());
   }, []);
 
@@ -111,17 +104,12 @@ export default function GeolocationPage() {
   }, [position]);
 
 
+
   // ---- Centrer sur l'utilisateur ----
   function centerOnUser() {
     if (position && leafletMap.current) {
       leafletMap.current.setView([position.latitude, position.longitude], 16);
     }
-  }
-
-  // ---- Déconnexion ----
-  function logout() {
-    clearAuth();
-    router.push("/login");
   }
 
   // ---- Couleurs statut GPS ----
@@ -133,139 +121,10 @@ export default function GeolocationPage() {
 
 
   return (
-    <div className="flex h-screen w-full overflow-hidden bg-[#F8FAFC] text-[#1E293B]">
-
-      {/* ============ SIDEBAR ============ */}
-      <aside className="hidden md:flex w-64 h-full flex-col justify-between border-r border-[#E2E8F0] bg-white p-4">
-        <div className="flex flex-col gap-6">
-          {/* Brand */}
-          <div className="px-2">
-            <h1 className="text-[#1E293B] text-xl font-bold flex items-center gap-2">
-              e-Dr TIM
-            </h1>
-            <p className="text-[#94A3B8] text-xs font-medium mt-1">
-              Tableau de bord Livreur
-            </p>
-          </div>
-
-          {/* Nav */}
-          <nav className="flex flex-col gap-1">
-            {[
-              { icon: MapPin, label: "Géolocalisation", href: "/geolocation", active: true },
-              { icon: Package, label: "Livraisons actives", href: "/missions" },
-              { icon: Clock, label: "Historique", href: "/history" },
-              { icon: RefreshCw, label: "Mission en cours", href: "/missions" },
-              { icon: Settings, label: "Paramètres", href: "/settings" },
-            ].map(({ icon: Icon, label, href, active }) => (
-              <a
-                key={label}
-                href={href}
-                className={`flex items-center gap-3 px-3 py-2.5 rounded-xl transition-all text-sm font-medium ${active
-                  ? "bg-[#22C55E]/10 text-[#22C55E] font-semibold"
-                  : "hover:bg-[#F0FDF4] text-[#64748B] hover:text-[#22C55E]"
-                  }`}
-              >
-                <Icon size={18} className={active ? "text-[#22C55E]" : "text-[#94A3B8]"} />
-                <span>{label}</span>
-              </a>
-            ))}
-          </nav>
-        </div>
-
-        {/* User card + logout */}
-        <div className="flex flex-col gap-3">
-          <div className="p-3 rounded-xl bg-[#F0FDF4] border border-[#E2E8F0]">
-            <div className="flex items-center gap-3">
-              <div className="w-10 h-10 rounded-full ring-2 ring-[#22C55E]/20 bg-[#22C55E]/10 flex items-center justify-center">
-                <User size={18} className="text-[#22C55E]" />
-              </div>
-              <div className="flex flex-col overflow-hidden flex-1">
-                <p className="text-sm font-bold truncate text-[#1E293B]">
-                  {userInfo ? `${userInfo.firstName} ${userInfo.lastName}` : "Chargement..."}
-                </p>
-                <p className="text-xs text-[#94A3B8] truncate">
-                  {userInfo?.telephone || "---"}
-                </p>
-              </div>
-            </div>
-          </div>
-          <button
-            onClick={logout}
-            className="flex items-center justify-center gap-2 px-4 py-2 rounded-xl bg-red-50 text-red-600 hover:bg-red-100 transition-colors"
-          >
-            <LogOut size={16} />
-            <span className="text-sm font-medium">Déconnexion</span>
-          </button>
-        </div>
-      </aside>
-
+    <>
       {/* ============ CONTENU PRINCIPAL ============ */}
       <main className="flex-1 flex flex-col h-full overflow-hidden">
 
-        {/* Header */}
-        <header className="flex items-center justify-between border-b border-[#E2E8F0] bg-white px-4 md:px-6 py-3 z-40 shrink-0">
-          <div className="flex items-center gap-3">
-            <h2 className="text-[#1E293B] text-base md:text-lg font-bold tracking-tight">
-              Géolocalisation
-            </h2>
-          </div>
-
-          <div className="flex items-center gap-2 md:gap-4">
-            {/* Badge GPS */}
-            <div className="flex items-center px-3 py-1.5 rounded-full bg-[#F0FDF4] border border-[#E2E8F0]">
-              <div className={`w-2 h-2 rounded-full mr-2 ${gpsStatusColor}`} />
-              <span className="text-xs font-bold text-[#94A3B8] hidden sm:inline">{statusText}</span>
-            </div>
-
-            {/* Notifications */}
-            <div className="relative">
-              <button
-                onClick={() => setShowNotifDropdown(!showNotifDropdown)}
-                className="relative p-2 text-[#64748B] hover:text-[#1E293B] transition-colors rounded-xl hover:bg-[#F0FDF4]"
-              >
-                <Bell size={18} />
-                {unreadCount > 0 && (
-                  <span className="absolute -top-0.5 -right-0.5 min-w-[18px] h-[18px] bg-red-500 text-white text-[10px] font-bold rounded-full flex items-center justify-center border-2 border-white">
-                    {unreadCount}
-                  </span>
-                )}
-              </button>
-
-              {/* Dropdown notifications */}
-              {showNotifDropdown && (
-                <div className="absolute right-0 top-12 w-80 max-w-[90vw] z-50 rounded-xl border border-[#E2E8F0] bg-white shadow-2xl overflow-hidden">
-                  <div className="flex items-center justify-between px-3 py-2 border-b border-[#E2E8F0]">
-                    <span className="text-xs font-bold text-[#1E293B]">Notifications</span>
-                    <button
-                      onClick={() => { clearAll(); markAllAsRead(); }}
-                      className="text-[11px] font-semibold text-[#22C55E] hover:underline"
-                    >
-                      Effacer
-                    </button>
-                  </div>
-                  {notifications.length === 0 ? (
-                    <div className="px-3 py-4 text-xs text-[#94A3B8]">
-                      Aucune notification pour le moment.
-                    </div>
-                  ) : (
-                    <div className="max-h-80 overflow-y-auto divide-y divide-[#F1F5F9]">
-                      {notifications.map((n) => (
-                        <button
-                          key={n.id}
-                          onClick={() => { setSelectedNotif(n); setShowNotifModal(true); setShowNotifDropdown(false); }}
-                          className={`w-full text-left px-3 py-3 hover:bg-[#F8FAFC] transition-colors ${!n.read ? "bg-[#22C55E]/5" : ""}`}
-                        >
-                          <p className="text-xs font-bold text-[#1E293B]">{n.title}</p>
-                          <p className="text-[11px] text-[#94A3B8] mt-0.5 line-clamp-1">{n.body}</p>
-                        </button>
-                      ))}
-                    </div>
-                  )}
-                </div>
-              )}
-            </div>
-          </div>
-        </header>
 
         {/* Content */}
         <div className="flex-1 overflow-y-auto p-4 md:p-6 lg:p-8">
@@ -508,6 +367,6 @@ export default function GeolocationPage() {
           </div>
         </div>
       )}
-    </div>
+    </>
   );
 }

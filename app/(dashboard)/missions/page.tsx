@@ -9,7 +9,7 @@
 import { useEffect, useRef, useState, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import {
-  Truck, MapPin, Package, Clock, Settings, User, LogOut,
+  Truck, MapPin, Package, Clock, Settings, User,
   RefreshCw, Bell, Building2, Phone, HourglassIcon, Loader2,
   CheckCircle, XCircle, ArrowRight, AlertTriangle, X, ScanLine,
   Hash, ChevronRight,
@@ -27,7 +27,7 @@ import {
   type MissionInfoResponse,
   type PickupOfficine,
 } from "@/lib/api-client";
-import { getUserInfo, clearAuth, getDeliveryStatus, type UserInfo } from "@/lib/auth";
+import { getDeliveryStatus } from "@/lib/auth";
 
 // ─── types ────────────────────────────────────────────────────────────────────
 
@@ -55,7 +55,6 @@ function formatTimeAgo(iso: string, now: number) {
 
 export default function MissionsPage() {
   const router = useRouter();
-  const [userInfo, setUserInfo] = useState<UserInfo | null>(null);
   const [now, setNow] = useState<number>(Date.now());
   const [appState, setAppState] = useState<AppState>("loading");
   const [driverStatus, setDriverStatus] = useState<string | null>(null);
@@ -89,7 +88,6 @@ export default function MissionsPage() {
   // ── Init ──────────────────────────────────────────────────────────────────
 
   useEffect(() => {
-    setUserInfo(getUserInfo());
     setDriverStatus(getDeliveryStatus());
     const interval = setInterval(() => setNow(Date.now()), 60000);
     return () => clearInterval(interval);
@@ -289,14 +287,6 @@ export default function MissionsPage() {
     fetchLastMission();
   }
 
-  // ── Logout ────────────────────────────────────────────────────────────────
-
-  function logout() {
-    if (listIntervalRef.current) clearInterval(listIntervalRef.current);
-    if (notifIntervalRef.current) clearInterval(notifIntervalRef.current);
-    clearAuth();
-    router.push("/login");
-  }
 
   // ── Helpers ───────────────────────────────────────────────────────────────
 
@@ -310,12 +300,7 @@ export default function MissionsPage() {
       gpsStatus === "searching" ? "Recherche..." :
         gpsStatus === "error" ? "Erreur GPS" : "GPS Inactif";
 
-  const navItems = [
-    { icon: MapPin, label: "Géolocalisation", href: "/geolocation" },
-    { icon: Package, label: "Missions", href: "/missions", active: true },
-    { icon: Clock, label: "Historique", href: "/history" },
-    { icon: Settings, label: "Paramètres", href: "/settings" },
-  ];
+
 
   // ── Mission display helpers ───────────────────────────────────────────────
 
@@ -333,53 +318,7 @@ export default function MissionsPage() {
   // ── Render ────────────────────────────────────────────────────────────────
 
   return (
-    <div className="flex h-screen w-full overflow-hidden bg-[#F8FAFC] text-[#1E293B]">
-
-      {/* SIDEBAR */}
-      <aside className="hidden md:flex w-64 h-full flex-col justify-between border-r border-[#E2E8F0] bg-white p-4">
-        <div className="flex flex-col gap-6">
-          <div className="px-2">
-            <h1 className="text-xl font-bold text-[#1E293B]">e-Dr TIM</h1>
-            <p className="text-xs text-[#94A3B8] font-medium mt-1">Tableau de bord Livreur</p>
-          </div>
-          <nav className="flex flex-col gap-1">
-            {navItems.map(({ icon: Icon, label, href, active }) => (
-              <a
-                key={label}
-                href={href}
-                className={`flex items-center gap-3 px-3 py-2.5 rounded-xl transition-all text-sm font-medium ${active ? "bg-[#22C55E]/10 text-[#22C55E] font-semibold" : "hover:bg-[#F0FDF4] text-[#64748B] hover:text-[#22C55E]"
-                  }`}
-              >
-                <Icon size={18} className={active ? "text-[#22C55E]" : "text-[#94A3B8]"} />
-                <span>{label}</span>
-              </a>
-            ))}
-          </nav>
-        </div>
-        <div className="flex flex-col gap-3">
-          <div className="p-3 rounded-xl bg-[#F0FDF4] border border-[#E2E8F0]">
-            <div className="flex items-center gap-3">
-              <div className="w-10 h-10 rounded-full ring-2 ring-[#22C55E]/20 bg-[#22C55E]/10 flex items-center justify-center">
-                <User size={18} className="text-[#22C55E]" />
-              </div>
-              <div className="flex flex-col overflow-hidden flex-1">
-                <p className="text-sm font-bold truncate text-[#1E293B]">
-                  {userInfo ? `${userInfo.firstName} ${userInfo.lastName}` : "Chargement..."}
-                </p>
-                <p className="text-xs text-[#94A3B8] truncate">{userInfo?.telephone || "---"}</p>
-              </div>
-            </div>
-          </div>
-          <button
-            onClick={logout}
-            className="flex items-center justify-center gap-2 px-4 py-2 rounded-xl bg-red-50 text-red-600 hover:bg-red-100 transition-colors"
-          >
-            <LogOut size={16} />
-            <span className="text-sm font-medium">Déconnexion</span>
-          </button>
-        </div>
-      </aside>
-
+    <>
       {/* MAIN */}
       <main className="flex-1 flex flex-col h-full overflow-hidden">
 
@@ -713,7 +652,12 @@ export default function MissionsPage() {
 
         {/* Mobile bottom nav */}
         <nav className="flex md:hidden border-t border-[#E2E8F0] bg-white shrink-0">
-          {navItems.map(({ icon: Icon, label, href, active }) => (
+          {([
+            { icon: MapPin, label: "Géoloc", href: "/geolocation" },
+            { icon: Package, label: "Missions", href: "/missions", active: true },
+            { icon: Clock, label: "Historique", href: "/history" },
+            { icon: Settings, label: "Paramètres", href: "/settings" },
+          ] as { icon: React.ElementType; label: string; href: string; active?: boolean }[]).map(({ icon: Icon, label, href, active }) => (
             <a
               key={label}
               href={href}
@@ -770,7 +714,7 @@ export default function MissionsPage() {
       {showNotifDropdown && (
         <div className="fixed inset-0 z-30" onClick={() => setShowNotifDropdown(false)} />
       )}
-    </div>
+    </>
   );
 }
 

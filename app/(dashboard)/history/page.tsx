@@ -1,10 +1,8 @@
 "use client";
 
 import { useEffect, useState, useCallback } from "react";
-import { useRouter } from "next/navigation";
 import {
-  MapPin, Package, Clock, ShoppingCart, Settings,
-  User, LogOut, Bell, Truck, XCircle, Calendar,
+  User, Bell, Truck, XCircle, Calendar, Clock, MapPin,
   CheckCircle, X, ArrowDown, Building2, RefreshCw, Loader2,
   AlertCircle,
 } from "lucide-react";
@@ -14,7 +12,6 @@ import {
   type ApiNotification,
   type DriverHistoryMission,
 } from "@/lib/api-client";
-import { getUserInfo, clearAuth, type UserInfo } from "@/lib/auth";
 
 // ─── Types locaux ───────────────────────────────────────────────────────────
 
@@ -91,9 +88,6 @@ function mapApiMission(m: DriverHistoryMission): Mission {
 // ─── Composant principal ──────────────────────────────────────────────────────
 
 export default function HistoryPage() {
-  const router = useRouter();
-  const [userInfo, setUserInfo] = useState<UserInfo | null>(null);
-  useEffect(() => { setUserInfo(getUserInfo()); }, []);
 
   const [allMissions, setAllMissions] = useState<Mission[]>([]);
   const [loading, setLoading] = useState(true);
@@ -199,7 +193,7 @@ export default function HistoryPage() {
     return new Date(iso).toLocaleDateString("fr-FR");
   }
 
-  function logout() { clearAuth(); router.push("/login"); }
+
 
   // ─── Données filtrées ──────────────────────────────────────────────────
 
@@ -216,13 +210,7 @@ export default function HistoryPage() {
 
   // ─── Helpers UI ────────────────────────────────────────────────────────
 
-  const navItems = [
-    { icon: MapPin, label: "Géolocalisation", href: "/geolocation" },
-    { icon: Package, label: "Missions actives", href: "/missions" },
-    { icon: Clock, label: "Historique", href: "/history", active: true },
-    { icon: ShoppingCart, label: "Livraison", href: "/missions" },
-    { icon: Settings, label: "Paramètres", href: "/settings" },
-  ];
+
 
   const tabs: { key: FilterTab; label: string }[] = [
     { key: "all", label: "Tout" },
@@ -244,49 +232,7 @@ export default function HistoryPage() {
   // ─── Render ─────────────────────────────────────────────────────────────
 
   return (
-    <div className="flex h-screen w-full overflow-hidden bg-[#F8FAFC] text-[#1E293B]">
-
-      {/* ===== SIDEBAR ===== */}
-      <aside className="hidden md:flex w-64 h-full flex-col justify-between border-r border-[#E2E8F0] bg-white p-4">
-        <div className="flex flex-col gap-6">
-          <div className="px-2">
-            <h1 className="text-xl font-bold text-[#1E293B]">e-Dr TIM</h1>
-            <p className="text-xs text-[#94A3B8] font-medium mt-1">Tableau de bord Livreur</p>
-          </div>
-          <nav className="flex flex-col gap-1">
-            {navItems.map(({ icon: Icon, label, href, active }) => (
-              <a key={label} href={href}
-                className={`flex items-center gap-3 px-3 py-2.5 rounded-xl transition-all text-sm font-medium ${active
-                  ? "bg-[#22C55E]/10 text-[#22C55E] font-semibold"
-                  : "hover:bg-[#F0FDF4] text-[#64748B] hover:text-[#22C55E]"}`}
-              >
-                <Icon size={18} className={active ? "text-[#22C55E]" : "text-[#94A3B8]"} />
-                <span>{label}</span>
-              </a>
-            ))}
-          </nav>
-        </div>
-        <div className="flex flex-col gap-3">
-          <div className="p-3 rounded-xl bg-[#F0FDF4] border border-[#E2E8F0]">
-            <div className="flex items-center gap-3">
-              <div className="w-10 h-10 rounded-full ring-2 ring-[#22C55E]/20 bg-[#22C55E]/10 flex items-center justify-center">
-                <User size={18} className="text-[#22C55E]" />
-              </div>
-              <div className="flex flex-col overflow-hidden flex-1">
-                <p className="text-sm font-bold truncate text-[#1E293B]">
-                  {userInfo ? `${userInfo.firstName} ${userInfo.lastName}` : "Chargement..."}
-                </p>
-                <p className="text-xs text-[#94A3B8] truncate">{userInfo?.telephone || "---"}</p>
-              </div>
-            </div>
-          </div>
-          <button onClick={logout} className="flex items-center justify-center gap-2 px-4 py-2 rounded-xl bg-red-50 text-red-600 hover:bg-red-100 transition-colors">
-            <LogOut size={16} />
-            <span className="text-sm font-medium">Déconnexion</span>
-          </button>
-        </div>
-      </aside>
-
+    <>
       {/* ===== MAIN ===== */}
       <main className="flex-1 flex flex-col h-full overflow-hidden">
 
@@ -564,6 +510,6 @@ export default function HistoryPage() {
           </div>
         </div>
       )}
-    </div>
+    </>
   );
 }
