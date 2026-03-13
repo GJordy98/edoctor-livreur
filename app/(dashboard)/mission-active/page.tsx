@@ -15,7 +15,7 @@ import dynamic from "next/dynamic";
 const Barcode = dynamic(() => import("react-barcode"), { ssr: false });
 import {
   User, Package, Loader2, X, AlertTriangle,
-  ScanLine, Copy, Check, Phone, MapPin, Truck,
+  ScanLine, Check, Phone, MapPin, Truck,
   Store, ChevronRight, Home, Map, RefreshCw, Building2,
 } from "lucide-react";
 import {
@@ -53,7 +53,6 @@ export default function MissionActivePage() {
   const [phase, setPhase] = useState<Phase>("pickup");
   const [missionId, setMissionId] = useState("");
   const [orderId, setOrderId] = useState("");
-  const [pickupCode, setPickupCode] = useState("");
   const [pickupOfficines, setPickupOfficines] = useState<PickupOfficine[]>([]);
   const [missionInfo, setMissionInfo] = useState<MissionInfoResponse | null>(null);
   const [loadingOfficines, setLoadingOfficines] = useState(true);
@@ -61,7 +60,6 @@ export default function MissionActivePage() {
   const [confirmedIds, setConfirmedIds] = useState<string[]>([]);
   const [showCancel, setShowCancel] = useState(false);
   const [cancelLoading, setCancelLoading] = useState(false);
-  const [copied, setCopied] = useState(false);
 
   const gpsRef = useRef<number | null>(null);
 
@@ -77,9 +75,6 @@ export default function MissionActivePage() {
         mId = String(m.id || "");
       } catch { /* ignore */ }
     }
-
-    const code = localStorage.getItem("delivery_pickup_code") || "";
-    setPickupCode(code);
 
     // Try to get orderId from missionInfo saved
     const infoRaw = localStorage.getItem("current_mission_info");
@@ -153,13 +148,6 @@ export default function MissionActivePage() {
   }, []);
 
   // ── Actions ────────────────────────────────────────────────────────────────
-  const copyCode = useCallback(async () => {
-    if (!pickupCode) return;
-    await navigator.clipboard.writeText(pickupCode).catch(() => { });
-    setCopied(true);
-    setTimeout(() => setCopied(false), 2000);
-  }, [pickupCode]);
-
   const confirmPharmacy = useCallback((id: string) => {
     setConfirmedIds((prev) => {
       const next = prev.includes(id) ? prev : [...prev, id];
@@ -286,79 +274,7 @@ export default function MissionActivePage() {
       {phase === "pickup" && (
         <div className="space-y-4">
 
-          {/* Code de ramassage */}
-          <div className="bg-white rounded-2xl border border-[#E2E8F0] p-5 shadow-sm">
-            <div className="flex items-center gap-3 mb-4">
-              <div className="w-9 h-9 rounded-xl bg-[#22C55E]/10 flex items-center justify-center">
-                <ScanLine size={18} className="text-[#22C55E]" />
-              </div>
-              <div>
-                <p className="text-[11px] text-[#94A3B8] uppercase font-bold tracking-wider">
-                  Code de ramassage
-                </p>
-                <p className="text-xs text-[#64748B]">
-                  Montrez ce code à chaque pharmacie
-                </p>
-              </div>
-            </div>
 
-            {pickupCode ? (
-              <div className="bg-[#F0FDF4] rounded-xl p-4 border border-[#22C55E]/20">
-                {pickupCode.startsWith("data:image") ? (
-                  // Image base64 (QR code retourné directement par le backend)
-                  // eslint-disable-next-line @next/next/no-img-element
-                  <img
-                    src={pickupCode}
-                    alt="QR Code ramassage"
-                    className="mx-auto max-w-[200px] max-h-[200px] rounded-xl"
-                  />
-                ) : (
-                  // Code numérique → affichage code-barres scannable
-                  <div className="flex flex-col items-center gap-3">
-                    {/* Code-barres SVG scannable */}
-                    <div className="bg-white rounded-xl p-3 shadow-inner w-full flex justify-center">
-                      <Barcode
-                        value={pickupCode}
-                        format="CODE128"
-                        width={2}
-                        height={80}
-                        displayValue={false}
-                        background="#ffffff"
-                        lineColor="#1E293B"
-                        margin={8}
-                      />
-                    </div>
-                    {/* Code en clair, plus petit */}
-                    <div className="flex items-center gap-2">
-                      <span className="font-mono text-base font-bold text-[#1E293B] tracking-[0.25em] bg-white px-3 py-1 rounded-lg border border-[#E2E8F0] shadow-sm">
-                        {pickupCode}
-                      </span>
-                      <button
-                        onClick={copyCode}
-                        title="Copier"
-                        className="p-1.5 rounded-lg border border-[#22C55E]/30 text-[#22C55E] hover:bg-[#22C55E]/10 transition-colors"
-                      >
-                        {copied ? <Check size={13} /> : <Copy size={13} />}
-                      </button>
-                    </div>
-                    {copied && (
-                      <p className="text-xs text-[#22C55E] font-semibold">Copié !</p>
-                    )}
-                  </div>
-                )}
-              </div>
-            ) : (
-              <div className="bg-[#F8FAFC] rounded-xl p-4 text-center border border-[#E2E8F0]">
-                <Package size={28} className="text-[#94A3B8] mx-auto mb-2" />
-                <p className="text-sm text-[#94A3B8]">
-                  Code non disponible — utilisez votre ID mission
-                </p>
-                <p className="font-mono text-lg font-black text-[#1E293B] mt-2 break-all">
-                  {missionId}
-                </p>
-              </div>
-            )}
-          </div>
 
           {/* Carte des officines */}
           {pharmacyMarkers.length > 0 && (
@@ -490,6 +406,44 @@ export default function MissionActivePage() {
                           )}
                         </div>
                       </div>
+
+                      {/* QR code propre à cette officine */}
+                      {officine.qr_code && (
+                        <div className="mt-3 pt-3 border-t border-[#F1F5F9]">
+                          <p className="text-[10px] text-[#94A3B8] uppercase font-bold tracking-wider mb-2 flex items-center gap-1">
+                            <ScanLine size={11} />
+                            Code de ramassage — à montrer à cette pharmacie
+                          </p>
+                          <div className="bg-[#F8FAFC] rounded-xl p-3 flex flex-col items-center gap-2">
+                            {String(officine.qr_code).startsWith("data:image") || String(officine.qr_code).startsWith("http") ? (
+                              // eslint-disable-next-line @next/next/no-img-element
+                              <img
+                                src={String(officine.qr_code)}
+                                alt={`QR code ${officine.name || idx + 1}`}
+                                className="max-h-36 rounded-lg"
+                              />
+                            ) : (
+                              <div className="flex flex-col items-center w-full gap-2">
+                                <div className="bg-white rounded-lg p-2 shadow-sm border border-[#E2E8F0] w-full flex justify-center overflow-hidden">
+                                  <Barcode
+                                    value={String(officine.qr_code)}
+                                    format="CODE128"
+                                    width={2}
+                                    height={70}
+                                    displayValue={false}
+                                    background="#ffffff"
+                                    lineColor="#1E293B"
+                                    margin={6}
+                                  />
+                                </div>
+                                <span className="font-mono text-sm font-bold text-[#1E293B] tracking-[0.25em] bg-white px-3 py-1 rounded-lg border border-[#E2E8F0] shadow-sm">
+                                  {String(officine.qr_code)}
+                                </span>
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                      )}
                     </div>
                   );
                 })}
