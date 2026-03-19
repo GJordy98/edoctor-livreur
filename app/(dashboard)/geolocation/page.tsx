@@ -2,12 +2,11 @@
 
 /**
  * Page Géolocalisation / Disponibilité — e-Dr TIM Delivery System
- * Carte Leaflet (import dynamique), toggle disponibilité, notifications
+ * Carte Google Maps, toggle disponibilité, notifications
  */
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import "leaflet/dist/leaflet.css";
 import { useGeolocation } from "@/hooks/useGeolocation";
 import { useNotifications } from "@/hooks/useNotifications";
 import { getDeliveryStatus } from "@/lib/auth";
@@ -24,9 +23,109 @@ import {
   Lock,
   X,
 } from "lucide-react";
+import { APIProvider, Map, AdvancedMarker, useMap } from "@vis.gl/react-google-maps";
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-type LeafletMap = any;
+function GeolocationMapControls({ position }: { position: { latitude: number; longitude: number } | null }) {
+  const map = useMap();
+
+  const handleCenter = () => {
+    if (map && position) {
+      map.setCenter({ lat: position.latitude, lng: position.longitude });
+      map.setZoom(16);
+    }
+  };
+
+  const handleZoomIn = () => {
+    if (map) map.setZoom((map.getZoom() ?? 13) + 1);
+  };
+
+  const handleZoomOut = () => {
+    if (map) map.setZoom((map.getZoom() ?? 13) - 1);
+  };
+
+  // Centrer à l'initialisation de la position
+  useEffect(() => {
+    if (map && position && !map.getCenter()) {
+      map.setCenter({ lat: position.latitude, lng: position.longitude });
+    }
+  }, [map, position]);
+
+  return (
+    <>
+      <div className="absolute bottom-16 md:bottom-12 right-3 md:right-4 z-10 flex flex-col gap-2">
+        <button
+          onClick={handleCenter}
+          title="Centrer"
+          className="bg-white text-[#1E293B] p-2.5 md:p-3 rounded-xl shadow-lg hover:bg-[#F0FDF4] transition-colors border border-[#E2E8F0]"
+        >
+          <Crosshair size={18} />
+        </button>
+        <button
+          onClick={handleZoomIn}
+          title="Zoom +"
+          className="bg-white text-[#1E293B] p-2.5 md:p-3 rounded-xl shadow-lg hover:bg-[#F0FDF4] transition-colors border border-[#E2E8F0]"
+        >
+          <Plus size={18} />
+        </button>
+        <button
+          onClick={handleZoomOut}
+          title="Zoom -"
+          className="bg-white text-[#1E293B] p-2.5 md:p-3 rounded-xl shadow-lg hover:bg-[#F0FDF4] transition-colors border border-[#E2E8F0]"
+        >
+          <Minus size={18} />
+        </button>
+      </div>
+
+      <div className="w-full flex-1" style={{ minHeight: "300px" }}>
+        <Map
+          defaultCenter={{ lat: 4.05, lng: 9.7 }} // Douala default
+          defaultZoom={13}
+          disableDefaultUI={true}
+          mapId="geoloc-map-id" // Requis pour AdvancedMarker
+        >
+          {position && (
+            <AdvancedMarker position={{ lat: position.latitude, lng: position.longitude }}>
+              <div style={{ position: "relative", width: "20px", height: "20px" }}>
+                <div
+                  style={{
+                    position: "absolute",
+                    inset: 0,
+                    background: "#3b82f6",
+                    borderRadius: "50%",
+                    border: "3px solid white",
+                    boxShadow: "0 0 0 2px rgba(59,130,246,0.5)",
+                    zIndex: 2,
+                  }}
+                ></div>
+                <div
+                  className="pulse-dot"
+                  style={{
+                    position: "absolute",
+                    inset: "-6px",
+                    background: "rgba(59,130,246,0.25)",
+                    borderRadius: "50%",
+                    zIndex: 1,
+                  }}
+                ></div>
+                <style>
+                {`
+                  @keyframes pgps-pulse {
+                    0%   { transform: scale(1);   opacity: 0.8; }
+                    100% { transform: scale(3); opacity: 0; }
+                  }
+                  .pulse-dot {
+                    animation: pgps-pulse 2s ease-out infinite;
+                  }
+                `}
+                </style>
+              </div>
+            </AdvancedMarker>
+          )}
+        </Map>
+      </div>
+    </>
+  );
+}
 
 export default function GeolocationPage() {
   const router = useRouter();
@@ -38,99 +137,22 @@ export default function GeolocationPage() {
   const [showNotifModal, setShowNotifModal] = useState(false);
   const [selectedNotif, setSelectedNotif] = useState<(typeof notifications)[0] | null>(null);
 
-  const mapRef = useRef<HTMLDivElement>(null);
-  const leafletMap = useRef<LeafletMap>(null);
-  const markerRef = useRef<LeafletMap>(null);
-
   useEffect(() => {
     setDriverStatus(getDeliveryStatus());
   }, []);
 
-  // ---- Initialisation de la carte Leaflet (SSR safe) ----
   useEffect(() => {
-    if (!mapRef.current || leafletMap.current) return;
-
-    import("leaflet").then((L) => {
-      if (!mapRef.current || leafletMap.current) return;
-
-      // Fix icônes Leaflet avec Next.js
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      delete (L.Icon.Default.prototype as any)._getIconUrl;
-      L.Icon.Default.mergeOptions({
-        iconRetinaUrl: "https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon-2x.png",
-        iconUrl: "https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon.png",
-        shadowUrl: "https://unpkg.com/leaflet@1.9.4/dist/images/marker-shadow.png",
-      });
-
-      // Créer la carte centrée sur Douala (défaut Cameroun)
-      leafletMap.current = L.map(mapRef.current, {
-        center: [4.05, 9.7],
-        zoom: 13,
-        zoomControl: false,
-      });
-
-      // Tuile OpenStreetMap
-      L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
-        attribution: "© OpenStreetMap contributors",
-        maxZoom: 19,
-      }).addTo(leafletMap.current);
-    });
-
     startWatching();
-
-    return () => {
-      stopWatching();
-    };
+    return () => stopWatching();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // ---- Mettre à jour le marqueur quand la position change ----
-  useEffect(() => {
-    if (!position || !leafletMap.current) return;
-
-    import("leaflet").then((L) => {
-      const { latitude, longitude } = position;
-
-      if (markerRef.current) {
-        markerRef.current.setLatLng([latitude, longitude]);
-      } else {
-        markerRef.current = L.marker([latitude, longitude])
-          .addTo(leafletMap.current)
-          .bindPopup("Votre position");
-      }
-
-      leafletMap.current.setView([latitude, longitude], leafletMap.current.getZoom());
-    });
-  }, [position]);
-
-
-
-  // ---- Centrer sur l'utilisateur ----
-  function centerOnUser() {
-    if (position && leafletMap.current) {
-      leafletMap.current.setView([position.latitude, position.longitude], 16);
-    }
-  }
-
-  // ---- Couleurs statut GPS ----
-  const gpsStatusColor =
-    status === "active" ? "bg-green-400" :
-      status === "searching" ? "bg-amber-400 pulse-dot" :
-        "bg-red-400";
-
-
-
   return (
     <>
-      {/* ============ CONTENU PRINCIPAL ============ */}
       <main className="flex-1 flex flex-col h-full overflow-hidden">
-
-
-        {/* Content */}
         <div className="flex-1 overflow-y-auto p-4 md:p-6 lg:p-8">
           <div className="max-w-7xl mx-auto flex flex-col gap-6">
 
-            {/* Heading */}
             <div>
               <h1 className="text-xl md:text-2xl lg:text-3xl font-bold text-[#1E293B] tracking-tight">
                 Disponibilité Livreur
@@ -140,15 +162,12 @@ export default function GeolocationPage() {
               </p>
             </div>
 
-            {/* Grid : Carte + Panneau */}
             <div className="grid grid-cols-1 lg:grid-cols-12 gap-4 md:gap-6">
-
-              {/* Carte Leaflet */}
+              
               <div
                 className="lg:col-span-8 flex flex-col rounded-2xl overflow-hidden border border-[#E2E8F0] bg-[#F8FAFC] relative shadow-lg"
                 style={{ minHeight: "350px" }}
               >
-                {/* Zone actuelle */}
                 <div className="absolute top-3 left-3 md:top-4 md:left-4 z-10 pointer-events-none">
                   <div className="bg-white/90 backdrop-blur-md border border-[#E2E8F0] px-4 py-2 rounded-xl shadow-lg pointer-events-auto">
                     <div className="flex items-center gap-2 text-[#94A3B8] text-xs uppercase tracking-wider font-semibold">
@@ -161,28 +180,11 @@ export default function GeolocationPage() {
                   </div>
                 </div>
 
-                {/* Boutons carte */}
-                <div className="absolute bottom-16 md:bottom-12 right-3 md:right-4 z-10 flex flex-col gap-2">
-                  {[
-                    { icon: Crosshair, action: centerOnUser, title: "Centrer" },
-                    { icon: Plus, action: () => leafletMap.current?.zoomIn(), title: "Zoom +" },
-                    { icon: Minus, action: () => leafletMap.current?.zoomOut(), title: "Zoom -" },
-                  ].map(({ icon: Icon, action, title }) => (
-                    <button
-                      key={title}
-                      onClick={action}
-                      title={title}
-                      className="bg-white text-[#1E293B] p-2.5 md:p-3 rounded-xl shadow-lg hover:bg-[#F0FDF4] transition-colors border border-[#E2E8F0]"
-                    >
-                      <Icon size={18} />
-                    </button>
-                  ))}
-                </div>
+                {/* Google Maps APIProvider & Map */}
+                <APIProvider apiKey={process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY as string}>
+                  <GeolocationMapControls position={position} />
+                </APIProvider>
 
-                {/* Div pour la carte */}
-                <div ref={mapRef} className="w-full flex-1" style={{ minHeight: "300px" }} />
-
-                {/* Pied de carte */}
                 <div className="absolute bottom-0 inset-x-0 bg-white/90 backdrop-blur-sm py-2 px-4 text-xs text-[#94A3B8] border-t border-[#E2E8F0] flex justify-between items-center z-10">
                   <span>
                     Dernière mise à jour :{" "}
@@ -195,10 +197,10 @@ export default function GeolocationPage() {
                 </div>
               </div>
 
-              {/* Panneau de contrôle */}
+              {/* Panel right */}
               <div className="lg:col-span-4 flex flex-col gap-4 md:gap-6">
-
-                {/* Carte statut — backend */}
+                
+                {/* Map status */}
                 <div className="bg-white rounded-2xl p-4 md:p-6 shadow-sm border border-[#E2E8F0] flex flex-col gap-4">
                   <div className="flex items-center justify-between">
                     <h3 className="text-[#1E293B] font-bold text-base md:text-lg">
@@ -251,7 +253,6 @@ export default function GeolocationPage() {
                   )}
                 </div>
 
-                {/* Télémétrie GPS */}
                 <div className="bg-white rounded-2xl p-4 md:p-6 shadow-sm border border-[#E2E8F0] flex flex-col gap-4">
                   <h3 className="text-[#1E293B] font-bold text-sm md:text-base flex items-center gap-2">
                     <Satellite size={18} className="text-[#22C55E]" />
@@ -292,7 +293,6 @@ export default function GeolocationPage() {
                   </div>
                 </div>
 
-                {/* Lien vers missions */}
                 <a
                   href="/missions"
                   className="bg-[#22C55E] hover:bg-[#16A34A] text-white font-bold py-4 rounded-xl shadow-lg shadow-[#22C55E]/20 transition-all active:scale-[0.98] flex items-center justify-center gap-2"
@@ -301,7 +301,6 @@ export default function GeolocationPage() {
                   <span>Voir les missions</span>
                 </a>
 
-                {/* Aide GPS */}
                 <div className="bg-[#F0FDF4] rounded-2xl p-4 border border-dashed border-[#22C55E]/30 flex flex-col items-center text-center gap-3">
                   <div className="w-10 h-10 rounded-full bg-white flex items-center justify-center text-[#94A3B8]">
                     <HelpCircle size={18} />
@@ -320,6 +319,7 @@ export default function GeolocationPage() {
                     Actualiser la position
                   </button>
                 </div>
+
               </div>
             </div>
           </div>
@@ -334,6 +334,7 @@ export default function GeolocationPage() {
             onClick={() => setShowNotifModal(false)}
           />
           <div className="relative bg-white rounded-2xl shadow-2xl max-w-sm w-full p-6 flex flex-col gap-4 border border-[#E2E8F0] z-10">
+            {/* Modal Content */}
             <div className="flex items-center gap-4">
               <div className="w-12 h-12 rounded-full bg-[#22C55E]/10 flex items-center justify-center shrink-0">
                 <Bell size={22} className="text-[#22C55E]" />
