@@ -13,11 +13,6 @@ const inter = Inter({
 export const metadata: Metadata = {
   title: "e-Dr TIM Delivery",
   description: "Application de livraison e-Dr TIM — Gestion des livreurs",
-  icons: {
-    icon: "/logo.png",
-    shortcut: "/logo.png",
-    apple: "/logo.png",
-  },
 };
 
 export default function RootLayout({

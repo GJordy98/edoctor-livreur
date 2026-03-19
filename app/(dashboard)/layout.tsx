@@ -68,10 +68,10 @@ export default function DashboardLayout({
         {/* Brand */}
         <Link
           href="/geolocation"
-          className="flex items-center gap-2 px-4 py-5 text-sm font-bold text-[#1E293B] hover:text-[#22C55E] transition-colors"
+          className="flex flex-col items-center gap-2 px-4 py-5 text-sm font-bold text-[#1E293B] hover:text-[#22C55E] transition-colors"
         >
           {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img src="/logo.png" alt="e-Dr TIM" style={{ height: 28, width: 'auto' }} className="object-contain" />
+          <img src="/logo.png" alt="e-Dr TIM" style={{ height: 56, width: 'auto' }} className="object-contain" />
           e-Dr TIM Delivery
         </Link>
 
