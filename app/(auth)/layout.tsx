@@ -8,17 +8,10 @@ export default function AuthLayout({ children }: { children: React.ReactNode }) 
       {/* Header */}
       <header className="w-full bg-white shadow-sm border-b border-[#E2E8F0] py-4 px-6 md:px-12 flex justify-between items-center">
         <div className="flex items-center gap-3">
-          {/* Logo pill */}
-          <div className="flex items-center gap-2 px-3 py-1.5 bg-[#F0FDF4] rounded-full border border-[#22C55E]/20">
-            <Truck size={18} className="text-[#22C55E]" />
-            <div className="flex flex-col leading-none">
-              <span className="text-base font-black text-[#22C55E] tracking-tight">
-                e-Dr TIM
-              </span>
-              <span className="text-[10px] text-[#94A3B8] font-semibold tracking-widest uppercase">
-                Livraison
-              </span>
-            </div>
+          {/* Logo */}
+          <div className="flex items-center">
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img src="/logo.png" alt="e-Dr TIM Delivery" style={{ height: 60, width: 'auto' }} className="object-contain" />
           </div>
         </div>
 
